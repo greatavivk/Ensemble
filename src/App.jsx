@@ -127,11 +127,44 @@ const EMPTY_OUTFIT = { id: 'o1', name: 'Untitled Look', items: { outerwear: null
 // ----------------------- App --------------------------------
 export default function App() {
   const [tab, setTab] = useState('dashboard')
-  const [items, setItems] = useState([]) // start empty (no demo)
+
+  // Items: persistent via localStorage
+  const [items, setItems] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('ensemble.items') || '[]')
+    } catch {
+      return []
+    }
+  })
+
   const [activeCategory, setActiveCategory] = useState('all')
   const [activeSeasonsFilter, setActiveSeasonsFilter] = useState([])
   const [outfit, setOutfit] = useState(EMPTY_OUTFIT)
-  const [savedLooks, setSavedLooks] = useState([])
+
+  // Saved Looks: persistent via localStorage
+  const [savedLooks, setSavedLooks] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('ensemble.savedLooks') || '[]')
+    } catch {
+      return []
+    }
+  })
+
+  // Save to localStorage whenever items change
+  useEffect(() => {
+    try {
+      localStorage.setItem('ensemble.items', JSON.stringify(items))
+    } catch {}
+  }, [items])
+
+  // Save to localStorage whenever savedLooks change
+  useEffect(() => {
+    try {
+      localStorage.setItem('ensemble.savedLooks', JSON.stringify(savedLooks))
+    } catch {}
+  }, [savedLooks])
+
+  // ... your existing App logic continues below
 
   // learned colors cache (for suggestions)
   const [learned, setLearned] = useState(getLearnedColors())
@@ -752,10 +785,17 @@ function Gallery({ items, savedLooks, onDeleteLook }) {
 .preview-title{ font-weight:700 }
 .preview-actions{ padding:8px }
 
-.masonry{ column-count:3; column-gap:12px }
-.masonry-card{ break-inside:avoid; border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); margin-bottom:12px }
-.look-empty{ width:36px; height:36px; border:1px dashed var(--black) }
-.acc-stack{ display:flex; gap:6px; flex-wrap:wrap }
+/* Saved Looks board size boost */
+.masonry-card .board.board-static {
+  transform: scale(1.3);
+  transform-origin: top left;
+}
+
+.masonry-card .board.board-static img {
+  max-width: 80%; /* shrink images to fit bigger board */
+  max-height: 80%;
+}
+
 
 .no-frame-img{ max-width:100%; max-height:100%; object-fit:contain; display:block; background:transparent }
 .no-frame-img.small{ max-height:40px }
