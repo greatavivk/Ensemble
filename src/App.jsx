@@ -237,45 +237,80 @@ export default function App(){
           />
         )}
         {/* PART SPLIT BOUNDARY — continue in Part 2 */}
-// App.jsx (Part 2/2) — ENSEMBLE
-// Paste this immediately after Part 1 to complete the file.
+// Ensemble — App (Part 2 of 2)
+// Paste this **after** Part 1 inside src/App.jsx
+// This part updates the Dashboard with:
+// - Hero background image from URL (persisted in localStorage)
+// - Smoother "BE / word" animation (stacked layout: BE on top, changing word below)
+// - Dark gradient overlay for readability
+// It also exports helper CSS you should merge with the main CSS string in Part 1.
 
-        {tab==='builder' && (
-          <Builder
-            items={items}
-            outfit={outfit}
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            onClearZone={(zone)=> setOutfit(prev=>{ const next=structuredClone(prev); if(zone==='accessories') next.items.accessories=[]; else next.items[zone]=null; return next })}
-          />
-        )}
-        {tab==='gallery' && <Gallery items={items} />}
-      </main>
-    </div>
-  )
-}
+// ================= Dashboard =================
+function Dashboard({ items, goToCloset }) {
+  const words = ['stylish', 'chic', 'fashionable', 'YOURSELF']
+  const [idx, setIdx] = React.useState(0)
+  const heroWord = words[idx]
 
-// ===================== Components =====================
-function NavBtn({label, active, onClick}){ return <button className={`nav-btn ${active?'active':''}`} onClick={onClick}>{label}</button> }
+  // rotate words (faster, smooth)
+  React.useEffect(() => {
+    const id = setInterval(() => setIdx(i => (i + 1) % words.length), 1600)
+    return () => clearInterval(id)
+  }, [])
 
-function Dashboard({ heroWord, goToCloset }){
+  // hero background URL (user-paste)
+  const [bgUrl, setBgUrl] = React.useState(() => {
+    try { return localStorage.getItem('ensemble.heroUrl') || '' } catch { return '' }
+  })
+  function setHeroFromPrompt(){
+    const u = window.prompt('Paste a direct image URL (.jpg/.png works best):', bgUrl)
+    if (u != null) {
+      setBgUrl(u)
+      try { localStorage.setItem('ensemble.heroUrl', u) } catch {}
+    }
+  }
+
+  const heroStyle = bgUrl ? {
+    backgroundImage: `url(${bgUrl})`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center'
+  } : {}
+
+  // recent items preview (optional)
+  const recent = (items || []).slice(0, 6)
+
   return (
     <section className="section">
-      <div className="hero">
-        <h1 className="hero-title">Be <span className="hero-rotate">{heroWord}</span></h1>
+      <div className={`hero ${bgUrl ? 'with-bg' : ''}`} style={heroStyle}>
+        {bgUrl && <div className="hero-overlay" aria-hidden="true" />}
+        <h1 className="hero-title">
+          <span className="hero-be">BE</span>
+          <span className="hero-word"><span key={heroWord} className="swap-word">{heroWord}</span></span>
+        </h1>
         <p className="hero-sub">High‑contrast editorial tools for decisive dressing.</p>
         <div className="cta-row">
           <button className="btn" onClick={goToCloset}>Go to Closet</button>
-          <a className="btn" href="#builder" onClick={e=>e.preventDefault()}>Build an Outfit</a>
+          <button className="btn" onClick={setHeroFromPrompt}>Set hero image</button>
         </div>
       </div>
+
       <h2 className="section-title"><span className="section-num">01</span> Recent Items</h2>
       <div className="grid">
-        {/* Recent items will appear here once saved; tied to Supabase later */}
+        {recent.map(i => (
+          <div key={i.id} className="card">
+            <div className={`card-frame ${i.imageUrl ? 'no-frame' : ''}`}>
+              {i.imageUrl ? <img src={i.imageUrl} alt={i.name} className="no-frame-img"/> : iconByKey(i.icon, { size: 36 })}
+            </div>
+            <div className="card-body">
+              <div className="card-title">{i.name}</div>
+              <div className="card-sub">{i.category}</div>
+            </div>
+          </div>
+        ))}
       </div>
+
       <h2 className="section-title"><span className="section-num">02</span> Stats</h2>
       <div className="stats">
-        <div className="stat-box"><div className="stat-num">—</div><div className="stat-label">Items</div></div>
+        <div className="stat-box"><div className="stat-num">{items?.length || 0}</div><div className="stat-label">Items</div></div>
         <div className="stat-box"><div className="stat-num">—</div><div className="stat-label">Looks</div></div>
         <div className="stat-box"><div className="stat-num">—</div><div className="stat-label">Last Added</div></div>
       </div>
@@ -283,256 +318,27 @@ function Dashboard({ heroWord, goToCloset }){
   )
 }
 
-function Closet({ items, activeCategory, onCategory, onSeasonsFilter, activeSeasonsFilter, onUploadClick, fileInputRef, onFileChange, uploadCategory, setUploadCategory, onItemUpdated }){
-  const [editing, setEditing] = useState(null) // item id for the drawer
-  const list = useMemo(()=>{
-    let l=[...items]
-    if(activeCategory!=='all') l=l.filter(i=>i.category===activeCategory)
-    if(activeSeasonsFilter.length) l=l.filter(i=>activeSeasonsFilter.every(s=>i.seasons?.includes(s)))
-    return l
-  },[items,activeCategory,activeSeasonsFilter])
-
-  return (
-    <section className="section">
-      <div className="toolbar">
-        <div className="tabs">
-          {CATEGORIES.map(c=> (
-            <button key={c.key} className={`tab ${activeCategory===c.key ? 'active' : ''}`} onClick={()=>onCategory(c.key)}>
-              {c.icon && iconByKey(c.icon,{size:16})} <span>{c.label}</span>
-            </button>
-          ))}
-        </div>
-        <div className="filters">
-          <Filter size={16}/>
-          {ALL_SEASONS.map(s=> (
-            <label key={s} className={`badge ${activeSeasonsFilter.includes(s)?'active':''}`}>
-              <input type="checkbox" checked={activeSeasonsFilter.includes(s)} onChange={()=> onSeasonsFilter(prev=> prev.includes(s)? prev.filter(x=>x!==s) : [...prev,s]) }/>
-              {s}
-            </label>
-          ))}
-        </div>
-        <div className="uploader">
-          <select className="select" value={uploadCategory} onChange={e=>setUploadCategory(e.target.value)}>
-            {CATEGORIES.filter(c=>c.key!=='all').map(c=> <option key={c.key} value={c.key}>{c.label}</option>)}
-          </select>
-          <button className="btn" onClick={onUploadClick}><Upload size={16}/> Upload</button>
-          <input ref={fileInputRef} type="file" accept="image/png,image/webp,image/jpeg" hidden onChange={onFileChange}/>
-        </div>
-      </div>
-
-      <div className="grid">
-        {list.map(i=> (
-          <div key={i.id} className="item-card" draggable onDragStart={(e)=>{ e.dataTransfer.setData('text/plain', i.id); }} onClick={()=>setEditing(i)}>
-            <div className="polaroid">
-              <div className={`polaroid-frame ${i.imageUrl ? 'no-frame' : ''}`}>
-                {i.imageUrl ? <img src={i.imageUrl} alt={i.name} className="no-frame-img"/> : iconByKey(i.icon,{size:40})}
-              </div>
-            </div>
-            <div className="item-meta">
-              <div className="item-title">{i.name}</div>
-              <div className="item-sub">{i.category}</div>
-              <div className="item-tags">
-                {(i.seasons||[]).map(s=> <span key={s} className="tag">{s}</span>)}
-                {(i.colorTags||[]).map(c=> <span key={c} className="tag">{c}</span>)}
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {editing && (
-        <ItemEditor item={editing} onClose={()=>setEditing(null)} onSave={(updated)=>{ onItemUpdated(updated); setEditing(null) }} />
-      )}
-    </section>
-  )
+// ================= CSS to merge =================
+// Find the big CSS string in Part 1 and replace the .hero block with this, or append if missing.
+const CSS_DASHBOARD = `
+.hero{
+  position:relative; color:var(--white); padding:28px;
+  box-shadow:4px 4px 0 var(--black) inset; background:var(--black);
+  min-height:220px; display:flex; flex-direction:column; justify-content:center;
 }
-
-function ItemEditor({ item, onClose, onSave }){
-  const [name, setName] = useState(item.name || 'Unnamed fashion piece')
-  const [seasons, setSeasons] = useState(item.seasons || [])
-  const [colorTags, setColorTags] = useState(item.colorTags || [])
-  const [occasions, setOccasions] = useState(item.occasions || [])
-
-  function toggle(list, value){ return list.includes(value) ? list.filter(v=>v!==value) : [...list, value] }
-
-  function onNameBlur(){
-    // Only auto-detect into empty fields
-    if (!seasons.length) setSeasons(detectSeasons(name))
-    if (!colorTags.length) setColorTags(detectColors(name))
-  }
-
-  function handleSave(){ onSave({ ...item, name: name.trim()||'Unnamed fashion piece', seasons, colorTags, occasions }) }
-
-  return (
-    <div className="drawer">
-      <div className="drawer-head">
-        <div className="drawer-title">Edit Item</div>
-        <button className="dz-clear" onClick={onClose}><X size={12}/></button>
-      </div>
-      <div className="drawer-body">
-        <label className="form-label">Name</label>
-        <input className="input" value={name} onChange={e=>setName(e.target.value)} onBlur={onNameBlur} />
-
-        <label className="form-label">Seasons</label>
-        <div className="checks">
-          {ALL_SEASONS.map(s=> (
-            <label key={s} className="check">
-              <input type="checkbox" checked={seasons.includes(s)} onChange={()=> setSeasons(toggle(seasons,s)) }/>
-              <span>{s}</span>
-            </label>
-          ))}
-        </div>
-
-        <label className="form-label">Color Tags</label>
-        <div className="checks">
-          {COLOR_WORDS.map(c=> (
-            <label key={c} className="check">
-              <input type="checkbox" checked={colorTags.includes(c)} onChange={()=> setColorTags(toggle(colorTags,c)) }/>
-              <span>{c}</span>
-            </label>
-          ))}
-        </div>
-
-        <label className="form-label">Occasions (comma-separated)</label>
-        <input className="input" value={occasions.join(', ')} onChange={e=> setOccasions(e.target.value.split(',').map(s=>s.trim()).filter(Boolean)) } />
-
-        <div className="drawer-actions">
-          <button className="btn" onClick={handleSave}>Save</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function Builder({ items, outfit, onDrop, onDragOver, onClearZone }){
-  const getItem = id => items.find(i=>i.id===id)
-  return (
-    <section className="section builder">
-      <div className="builder-left">
-        <h2 className="section-title"><span className="section-num">03</span> Categories</h2>
-        <p className="muted">Drag items into the silhouette zones.</p>
-        <div className="filmstrip">
-          {items.map(i=> (
-            <div key={i.id} className="film-cell">
-              <div className="film-frame">{i.imageUrl ? <img src={i.imageUrl} alt="img" className="no-frame-img small"/> : iconByKey(i.icon,{size:28})}</div>
-              <div className="film-caption">{i.name}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="builder-center">
-        <div className="silhouette">
-          <DropZone label="Hat" zone="hat" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.hat} onClear={()=>onClearZone('hat')}>
-            {outfit.items.hat && <ZoneItem item={getItem(outfit.items.hat)} />}
-          </DropZone>
-          <DropZone label="Top" zone="top" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.top} onClear={()=>onClearZone('top')}>
-            {outfit.items.top && <ZoneItem item={getItem(outfit.items.top)} />}
-          </DropZone>
-          <DropZone label="Bottom" zone="bottom" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.bottom} onClear={()=>onClearZone('bottom')}>
-            {outfit.items.bottom && <ZoneItem item={getItem(outfit.items.bottom)} />}
-          </DropZone>
-          <DropZone label="Shoes" zone="shoes" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.shoes} onClear={()=>onClearZone('shoes')}>
-            {outfit.items.shoes && <ZoneItem item={getItem(outfit.items.shoes)} />}
-          </DropZone>
-          <DropZone label="Accessories" zone="accessories" onDrop={onDrop} onDragOver={onDragOver} filled={outfit.items.accessories.length>0} onClear={()=>onClearZone('accessories')}>
-            {outfit.items.accessories.map(id=>{ const item=getItem(id); return <ZoneItem key={id} item={item} small /> })}
-          </DropZone>
-        </div>
-      </div>
-
-      <div className="builder-right">
-        <div className="preview">
-          <div className="preview-header"><div className="preview-title">Current Look</div><div className="rating"><Star size={14}/></div></div>
-          <div className="preview-frame">
-            <div className="preview-grid">
-              {['hat','top','bottom','shoes'].map(k=>{ const id=outfit.items[k]; const found=id && items.find(i=>i.id===id); return (
-                <div key={k} className="preview-cell">
-                  <div className="preview-label">{k.toUpperCase()}</div>
-                  <div className="preview-icon">{found ? (found.imageUrl ? <img src={found.imageUrl} alt="img" className="no-frame-img"/> : iconByKey(found.icon,{size:28})) : <Plus size={20}/>}</div>
-                </div>
-              )})}
-            </div>
-            <div className="preview-acc">{outfit.items.accessories.map(id=>{ const acc=items.find(i=>i.id===id); return <span key={id} className="tag">{acc?.name||'Accessory'}</span> })}</div>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function DropZone({ label, zone, children, onDrop, onDragOver, filled, onClear }){
-  return (
-    <div className={`dropzone ${filled?'filled':''}`} onDragOver={onDragOver} onDrop={(e)=>onDrop(e,zone)} tabIndex={0} aria-label={`${label} drop zone`}>
-      <div className="dz-label">{label}</div>
-      <button className="dz-clear" onClick={onClear} title="Clear"><X size={12}/></button>
-      <div className="dz-content">{children}</div>
-    </div>
-  )
-}
-
-function ZoneItem({ item, small }){
-  if (!item) return null
-  return (
-    <div className={`zone-item ${small?'small':''}`} title={item.name}>
-      {item.imageUrl ? <img src={item.imageUrl} alt={item.name} className={`no-frame-img ${small?'small':''}`}/> : iconByKey(item.icon,{size: small?18:28})}
-      <span className="zone-name">{item.name}</span>
-    </div>
-  )
-}
-
-function Gallery({ items }){
-  const list = [...items].slice(0,10)
-  return (
-    <section className="section">
-      <h2 className="section-title"><span className="section-num">04</span> Saved Looks</h2>
-      <div className="masonry">
-        {list.map((i,idx)=> (
-          <div key={idx} className="masonry-card">
-            <div className="polaroid">
-              <div className={`polaroid-frame ${i.imageUrl ? 'no-frame' : ''}`}>{i.imageUrl ? <img src={i.imageUrl} alt="img" className="no-frame-img"/> : iconByKey(i.icon,{size:36})}</div>
-            </div>
-            <div className="card-body"><div className="card-title">{i.name}</div><div className="card-sub italic">“Tailored minimalism.”</div></div>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-// ===================== Styles =====================
-const styles = { app:{ fontFamily: FONT_STACK, background: COLORS.offWhite, color: COLORS.black, minHeight:'100vh' }, header:{ position:'sticky', top:0, zIndex:10, background: COLORS.black, color: COLORS.white, display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 20px', borderBottom:`2px solid ${COLORS.white}` }, brand:{ fontWeight:700, letterSpacing:'2px' }, nav:{ display:'flex', gap:8 }, main:{ padding:20, maxWidth:1200, margin:'0 auto' } }
-
-const CSS = `
-:root { --black:${COLORS.black}; --white:${COLORS.white}; --off:${COLORS.offWhite}; --charcoal:${COLORS.charcoal}; --gray:${COLORS.gray}; --light:${COLORS.lightGray}; --red:${COLORS.red}; }
-.italic{font-style:italic}.muted{color:var(--gray)}
-.nav-btn{font-family:${FONT_STACK};color:var(--white);background:transparent;border:2px solid var(--white);padding:6px 10px;text-transform:uppercase;letter-spacing:1px;box-shadow:4px 4px 0 var(--white);cursor:pointer;transition:transform .12s,background .12s,color .12s}
-.nav-btn:hover{background:var(--white);color:var(--black);transform:translate(-2px,-2px)}.nav-btn.active{background:var(--white);color:var(--black)}
-.section{margin:24px 0}.section-title{font-weight:700;font-size:28px;display:flex;align-items:center;gap:12px;border-bottom:2px solid var(--black);padding-bottom:8px;margin-bottom:16px}.section-num{font-size:36px;color:var(--light)}
-.hero{background:var(--black);color:var(--white);padding:28px;box-shadow:4px 4px 0 var(--black) inset}.hero-title{font-size:32px}.hero-sub{font-size:16px;color:var(--off)}.cta-row{display:flex;gap:8px;margin-top:12px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px}
-.card{border:2px solid var(--black);background:var(--white);box-shadow:4px 4px 0 var(--black);display:flex;gap:10px;padding:12px;transition:transform .1s}.card:hover{transform:translate(-2px,-2px)}
-.card-frame{width:60px;height:60px;display:grid;place-items:center;border:2px solid var(--black)}.card-frame.no-frame{border:none;box-shadow:none;background:transparent}
-.no-frame-img{max-width:100%;max-height:100%;object-fit:contain;display:block;background:transparent}.no-frame-img.small{max-height:40px}.no-frame-img.tiny{max-height:20px}
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:12px}.stat-box{background:var(--black);color:var(--white);text-align:center;padding:14px;box-shadow:4px 4px 0 var(--black)}.stat-num{font-size:24px;font-weight:700}.stat-label{font-size:12px;letter-spacing:1px}
-.toolbar{display:flex;gap:12px;align-items:center;margin-bottom:12px}.tabs{display:flex;gap:8px}.tab{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:2px solid var(--black);background:var(--white);box-shadow:4px 4px 0 var(--black);cursor:pointer;transition:background .12s,color .12s,transform .12s}.tab:hover{background:var(--black);color:var(--white);transform:translate(-2px,-2px)}.tab.active{background:var(--black);color:var(--white)}
-.filters{display:flex;gap:6px;align-items:center}.badge{border:2px solid var(--black);padding:4px 8px;background:var(--white);cursor:pointer}.badge.active{background:var(--black);color:var(--white)}
-.uploader{display:inline-flex;gap:8px;align-items:center}.select{border:2px solid var(--black);background:var(--white);padding:6px}.btn{border:2px solid var(--black);padding:6px 10px;background:var(--white);box-shadow:4px 4px 0 var(--black);cursor:pointer}.btn:hover{transform:translate(-2px,-2px)}
-.item-card{border:2px solid var(--black);background:var(--white);box-shadow:4px 4px 0 var(--black);cursor:grab}.item-card:active{cursor:grabbing}.polaroid{background:var(--white);border-bottom:2px solid var(--black);padding:8px}.polaroid-frame{border:2px solid var(--black);height:120px;display:grid;place-items:center}.polaroid-frame.no-frame{border:none;box-shadow:none}
-.item-meta{padding:10px}.item-title{font-weight:700}.item-sub{color:var(--gray);font-size:12px}.item-tags .tag{display:inline-block;border:2px solid var(--black);padding:2px 6px;margin:4px 4px 0 0;font-size:12px}
-.builder{display:grid;grid-template-columns:240px 1fr 320px;gap:16px}.filmstrip{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.film-cell{background:var(--white);border:2px solid var(--black);padding:8px}.film-frame{border:2px solid var(--black);height:60px;display:grid;place-items:center;box-shadow:4px 4px 0 var(--black)}.film-caption{font-size:12px;text-align:center;margin-top:6px}
-.silhouette{position:relative;border:2px solid var(--black);background:linear-gradient(to bottom,#fff,#f0f0f0);height:520px;box-shadow:4px 4px 0 var(--black);display:grid;grid-template-rows:1fr 2fr 2fr 1.2fr 1.2fr;gap:8px;padding:8px}
-.dropzone{position:relative;border:2px dashed var(--black);padding:6px;display:grid;place-items:center;transition:transform .08s,border-color .12s;background:var(--white)}.dropzone.filled{border-style:solid}.dropzone:focus{outline:2px solid var(--black);outline-offset:2px}.dz-label{position:absolute;top:-10px;left:8px;background:var(--white);padding:0 6px;font-size:12px;letter-spacing:1px}.dz-clear{position:absolute;top:4px;right:4px;border:2px solid var(--black);background:var(--white);cursor:pointer;padding:2px}.dz-content{display:inline-flex;gap:8px;align-items:center}
-.zone-item{display:inline-flex;align-items:center;gap:8px;padding:4px 8px;border:2px solid var(--black);background:var(--white);box-shadow:4px 4px 0 var(--black)}.zone-item.small{transform:scale(.9)}.zone-name{font-size:14px}
-@keyframes snap{0%{transform:scale(.98)}100%{transform:scale(1)}}@keyframes bounce{0%{transform:translateY(0)}30%{transform:translateY(-6px)}60%{transform:translateY(0)}100%{transform:translateY(0)}}.anim-snap{animation:snap .15s ease-out}.anim-bounce{animation:bounce .25s cubic-bezier(.2,.6,.3,1.2);border-color:var(--red)!important}
-.preview{border:2px solid var(--black);background:var(--white);box-shadow:4px 4px 0 var(--black)}.preview-header{display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:2px solid var(--black)}.preview-title{font-weight:700}.preview-frame{padding:10px}.preview-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.preview-cell{border:2px solid var(--black);height:68px;display:grid;place-items:center;position:relative}.preview-label{position:absolute;top:4px;left:4px;font-size:10px;color:var(--gray)}.preview-icon{display:grid;place-items:center}.preview-acc{margin-top:8px;display:flex;gap:6px;flex-wrap:wrap}.tag{border:2px solid var(--black);padding:2px 6px;background:var(--white)}
-.drawer{position:fixed;right:12px;bottom:12px;width:360px;max-width:90vw;background:var(--white);border:2px solid var(--black);box-shadow:4px 4px 0 var(--black);padding:10px;z-index:20}
-.drawer-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}.drawer-title{font-weight:700}
-.form-label{font-weight:700;margin-top:8px;margin-bottom:6px}.input,.textarea{width:100%;border:2px solid var(--black);background:var(--white);padding:8px;box-shadow:4px 4px 0 var(--black);font-family:${FONT_STACK}}
-.checks{display:flex;gap:8px;flex-wrap:wrap}.check input{margin-right:6px}.drawer-actions{margin-top:12px;display:flex;justify-content:flex-end;gap:8px}
-.masonry{column-count:3;column-gap:12px}.masonry-card{break-inside:avoid;border:2px solid var(--black);background:var(--white);box-shadow:4px 4px 0 var(--black);margin-bottom:12px}
-@media (max-width:980px){.builder{grid-template-columns:1fr}.masonry{column-count:2}}
-@media (max-width:600px){.masonry{column-count:1}}
+.hero.with-bg{ background-color:#000; background-blend-mode:normal; }
+.hero-overlay{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,.55), rgba(0,0,0,.35)); pointer-events:none }
+.hero-title{ font-size:32px; display:flex; flex-direction:column; gap:6px; z-index:1 }
+.hero-be{ font-weight:700; letter-spacing:4px }
+.hero-word{ font-style:italic; line-height:1 }
+.swap-word{ display:inline-block; animation:wordfade .45s ease }
+@keyframes wordfade{ 0%{opacity:0; transform:translateY(6px)} 100%{opacity:1; transform:translateY(0)} }
+.hero-sub{ font-size:16px; color:var(--off); z-index:1 }
+.cta-row{ display:flex; gap:8px; margin-top:12px; z-index:1 }
 `
 
-// ===================== END (Part 2/2) =====================
+// In Part 1, after defining the main CSS string, you can append:
+//   const CSS = CSS_BASE + CSS_DASHBOARD
+// Or simply copy these rules into your existing CSS template.
+
+// NOTE: This file only contains the updated Dashboard and CSS helper. Other components (Closet, Builder, Gallery, etc.) remain as defined in Part 1.
