@@ -586,11 +586,19 @@ function Builder({ items, outfit, onDrop, onDragOver, onClearZone, onDragStart, 
           <div className="board-area outerwear">
             <DropZone label="Outerwear" zone="outerwear" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.outerwear} onClear={() => onClearZone('outerwear')}>
               {outfit.items.outerwear && <ZoneItem item={getItem(outfit.items.outerwear)} />}
+          <div className="board-area hat">
+            <DropZone label="Hat" zone="hat" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.hat} onClear={() => onClearZone('hat')}>
+              {outfit.items.hat && <ZoneItem item={getItem(outfit.items.hat)} />}
             </DropZone>
           </div>
           <div className="board-area top">
             <DropZone label="Top" zone="top" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.top} onClear={() => onClearZone('top')}>
               {outfit.items.top && <ZoneItem item={getItem(outfit.items.top)} />}
+            </DropZone>
+          </div>
+          <div className="board-area outerwear">
+            <DropZone label="Outerwear" zone="outerwear" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.outerwear} onClear={() => onClearZone('outerwear')}>
+              {outfit.items.outerwear && <ZoneItem item={getItem(outfit.items.outerwear)} />}
             </DropZone>
           </div>
           <div className="board-area bottom">
@@ -618,15 +626,7 @@ function Builder({ items, outfit, onDrop, onDragOver, onClearZone, onDragStart, 
         </div>
       </div>
     </section>
-  )
-}
-
-function DropZone({ label, zone, children, onDrop, onDragOver, filled, onClear }) {
-  return (
-    <div className={`dropzone ${filled ? 'filled' : ''}`} onDragOver={onDragOver} onDrop={(e) => onDrop(e, zone)} tabIndex={0} aria-label={`${label} drop zone`}>
-      <div className="dz-label">{label}</div>
-      <button className="dz-clear" onClick={onClear} title="Clear"><X size={12} /></button>
-      <div className="dz-content">{children}</div>
+@@ -630,51 +635,51 @@ function DropZone({ label, zone, children, onDrop, onDragOver, filled, onClear }
     </div>
   )
 }
@@ -653,6 +653,7 @@ function Gallery({ items, savedLooks, onDeleteLook }) {
               <div className="polaroid-frame no-frame">
                 <div className="board board-static">
                   {['outerwear','top','bottom','shoes','accessories'].map(zone => {
+                  {['hat','top','outerwear','bottom','shoes','accessories'].map(zone => {
                     if (zone === 'accessories') return (
                       <div key={zone} className={`board-area ${zone}`}>
                         <div className="acc-stack">
@@ -678,79 +679,7 @@ function Gallery({ items, savedLooks, onDeleteLook }) {
             </div>
           </div>
         ))}
-      </div>
-    </section>
-  )
-}
-
-// ----------------------- Styles ------------------------------
-const styles = {
-  app: { fontFamily: FONT_STACK, background: COLORS.off, color: COLORS.black, minHeight: '100vh' },
-  header: { position: 'sticky', top: 0, zIndex: 10, background: COLORS.black, color: COLORS.white, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 20px', borderBottom: `2px solid ${COLORS.white}` },
-  brand: { fontWeight: 700, letterSpacing: '2px' },
-  nav: { display: 'flex', gap: 8 },
-  main: { padding: 20, maxWidth: 1200, margin: '0 auto' },
-}
-
-const CSS = `
-:root{ --black:${COLORS.black}; --white:${COLORS.white}; --off:${COLORS.off}; --charcoal:${COLORS.charcoal}; --gray:${COLORS.gray}; --light:${COLORS.light}; --red:${COLORS.red}; }
-.italic{font-style:italic} .muted{color:var(--gray)}
-
-.nav-btn{ font-family:${FONT_STACK}; color:var(--white); background:transparent; border:2px solid var(--white); padding:6px 10px; text-transform:uppercase; letter-spacing:1px; box-shadow:4px 4px 0 var(--white); cursor:pointer; transition:transform .12s, background .12s, color .12s }
-.nav-btn:hover{ background:var(--white); color:var(--black); transform:translate(-2px,-2px) }
-.nav-btn.active{ background:var(--white); color:var(--black) }
-
-.section{ margin:24px 0 }
-.section-title{ font-weight:700; font-size:28px; display:flex; align-items:center; gap:12px; border-bottom:2px solid var(--black); padding-bottom:8px; margin-bottom:16px }
-.section-num{ font-size:36px; color:var(--light) }
-
-.hero{ position:relative; color:var(--white); padding:28px; box-shadow:4px 4px 0 var(--black) inset; background:var(--black); min-height:220px; display:flex; flex-direction:column; justify-content:center }
-.hero.with-bg{ background-color:#000; background-blend-mode:normal }
-.hero-overlay{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,.55), rgba(0,0,0,.35)); pointer-events:none }
-.hero-title{ font-size:32px; display:flex; flex-direction:column; gap:6px; z-index:1 }
-.hero-be{ font-weight:700; letter-spacing:4px }
-.hero-word{ font-style:italic; line-height:1 }
-.swap-word{ display:inline-block; animation:wordfade .45s ease }
-@keyframes wordfade{ 0%{opacity:0; transform:translateY(6px)} 100%{opacity:1; transform:translateY(0)} }
-.hero-sub{ font-size:16px; color:var(--off); z-index:1 }
-.cta-row{ display:flex; gap:8px; margin-top:12px; z-index:1 }
-
-.grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:16px }
-.card{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); display:flex; gap:10px; padding:12px; transition:transform .1s }
-.card:hover{ transform:translate(-2px,-2px) }
-.card-frame{ width:60px; height:60px; display:grid; place-items:center; border:2px solid var(--black) }
-.card-frame.no-frame{ border:none; box-shadow:none; background:transparent }
-.card-title{ font-weight:700 }
-.card-sub{ color:var(--gray); font-size:14px }
-
-.stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:12px }
-.stat-box{ background:var(--black); color:var(--white); text-align:center; padding:14px; box-shadow:4px 4px 0 var(--black) }
-.stat-num{ font-size:24px; font-weight:700 }
-.stat-label{ font-size:12px; letter-spacing:1px }
-
-.toolbar{ display:flex; gap:12px; align-items:center; margin-bottom:12px }
-.tabs{ display:flex; gap:8px }
-.tab{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); cursor:pointer; transition:background .12s, color .12s, transform .12s }
-.tab:hover{ background:var(--black); color:var(--white); transform:translate(-2px,-2px) }
-.tab.active{ background:var(--black); color:var(--white) }
-.filters{ display:flex; gap:6px; align-items:center }
-.badge{ border:2px solid var(--black); padding:4px 8px; background:var(--white); cursor:pointer }
-.badge.active{ background:var(--black); color:var(--white) }
-.uploader{ display:inline-flex; gap:8px; align-items:center }
-.select{ border:2px solid var(--black); background:var(--white); padding:6px }
-.btn{ border:2px solid var(--black); padding:6px 10px; background:var(--white); box-shadow:4px 4px 0 var(--black); cursor:pointer }
-.btn:hover{ transform:translate(-2px,-2px) }
-.btn.danger{ border-color:var(--red); color:var(--red) }
-.icon-btn{ border:2px solid var(--black); background:var(--white); padding:4px; cursor:pointer }
-
-.item-card{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); cursor:grab }
-.item-card:active{ cursor:grabbing }
-.item-card.hint{ opacity:.85; outline:2px dashed var(--red) }
-.polaroid{ background:var(--white); border-bottom:2px solid var(--black); padding:8px }
-.polaroid-frame{ border:2px solid var(--black); height:120px; display:grid; place-items:center }
-.polaroid-frame.no-frame{ border:none; box-shadow:none }
-.item-meta{ padding:10px }
-.item-title{ font-weight:700 }
+@@ -754,68 +759,70 @@ const CSS = `
 .item-sub{ color:var(--gray); font-size:12px }
 .item-tags .tag{ display:inline-block; border:2px solid var(--black); padding:2px 6px; margin:4px 4px 0 0; font-size:12px; font-weight:700; background:var(--white) }
 
@@ -777,12 +706,15 @@ const CSS = `
 .builder{ display:grid; grid-template-columns: 240px 1fr 320px; gap:16px }
 .filmstrip{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px }
 .film-cell{ background:var(--white); border:2px solid var(--black); padding:8px }
+.film-cell{ background:var(--white); border:2px solid var(--black); padding:9px }
 .film-cell.dim{ opacity:.5 }
 .film-frame{ border:2px solid var(--black); height:60px; display:grid; place-items:center; box-shadow:4px 4px 0 var(--black) }
+.film-frame{ border:2px solid var(--black); width:70px; height:70px; display:grid; place-items:center; box-shadow:4px 4px 0 var(--black) }
 .film-caption{ font-size:12px; text-align:center; margin-top:6px }
 
 /* Board layout */
 .board{ position:relative; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:160px 160px 140px; gap:10px }
+.board{ position:relative; width:420px; height:420px; margin:0 auto }
 .board-static .dropzone{ pointer-events:none }
 .board-area.outerwear{ grid-column:1/2; grid-row:1/2 }
 .board-area.top{ grid-column:2/3; grid-row:1/2 }
@@ -791,6 +723,15 @@ const CSS = `
 .board-area.accessories{ grid-column:2/3; grid-row:3/4 }
 
 .dropzone{ position:relative; border:2px dashed var(--black); padding:6px; display:grid; place-items:center; transition:transform .08s, border-color .12s; background:var(--white) }
+.board-area{ position:absolute; display:flex; align-items:center; justify-content:center }
+.board-area.hat{ top:0; right:0; width:180px; height:180px; z-index:5 }
+.board-area.top{ top:120px; right:10px; width:260px; height:260px; z-index:4 }
+.board-area.outerwear{ top:120px; left:0; width:260px; height:260px; z-index:3 }
+.board-area.bottom{ bottom:0; right:20px; width:250px; height:250px; z-index:2 }
+.board-area.shoes{ bottom:0; left:0; width:250px; height:250px; z-index:1 }
+.board-area.accessories{ top:0; left:0; width:190px; min-height:140px; z-index:3 }
+
+.dropzone{ position:relative; border:2px dashed var(--light); padding:6px; display:grid; place-items:center; transition:transform .08s, border-color .12s; background:var(--white); width:100%; height:100% }
 .dropzone.filled{ border-style:solid }
 .dz-label{ position:absolute; top:-10px; left:8px; background:var(--white); padding:0 6px; font-size:12px; letter-spacing:1px }
 .dz-clear{ position:absolute; top:4px; right:4px; border:2px solid var(--black); background:var(--white); cursor:pointer; padding:2px }
@@ -818,4 +759,5 @@ const CSS = `
 
 .no-frame-img{ max-width:100%; max-height:100%; object-fit:contain; display:block; background:transparent }
 .no-frame-img.small{ max-height:40px }
+.no-frame-img.small{ max-height:46px }
 `
