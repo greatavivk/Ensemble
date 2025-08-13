@@ -25,7 +25,7 @@ import {
 } from 'lucide-react'
 
 // ===================== Config & Supabase scaffold =====================
-const USE_SUPABASE = false // set true after you add your keys below
+const USE_SUPABASE = true // set true after you add your keys below
 const SUPABASE_URL = (typeof importMeta !== 'undefined' ? importMeta.env?.VITE_SUPABASE_URL : undefined) || window.__SUPABASE_URL__
 const SUPABASE_ANON_KEY = (typeof importMeta !== 'undefined' ? importMeta.env?.VITE_SUPABASE_ANON_KEY : undefined) || window.__SUPABASE_ANON_KEY__
 let supabase = null
