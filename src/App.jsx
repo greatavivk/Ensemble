@@ -139,7 +139,13 @@ export default function App() {
 
   const [activeCategory, setActiveCategory] = useState('all')
   const [activeSeasonsFilter, setActiveSeasonsFilter] = useState([])
-  const [outfit, setOutfit] = useState(EMPTY_OUTFIT)
+  const [outfit, setOutfit] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('ensemble.currentOutfit') || JSON.stringify(EMPTY_OUTFIT))
+    } catch {
+      return EMPTY_OUTFIT
+    }
+  })
 
   // Saved Looks: persistent via localStorage
   const [savedLooks, setSavedLooks] = useState(() => {
@@ -163,6 +169,13 @@ export default function App() {
       localStorage.setItem('ensemble.savedLooks', JSON.stringify(savedLooks))
     } catch {}
   }, [savedLooks])
+
+  // Save current outfit to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('ensemble.currentOutfit', JSON.stringify(outfit))
+    } catch {}
+  }, [outfit])
 
   // ... your existing App logic continues below
 
@@ -616,22 +629,19 @@ function Builder({ items, outfit, onDrop, onDragOver, onClearZone, onDragStart, 
       {/* Board center — fixed layout like your reference */}
       <div className="builder-center">
         <div className="board">
-          <div className="board-area outerwear">
-            <DropZone label="Outerwear" zone="outerwear" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.outerwear} onClear={() => onClearZone('outerwear')}>
-              {outfit.items.outerwear && <ZoneItem item={getItem(outfit.items.outerwear)} />}
           <div className="board-area hat">
             <DropZone label="Hat" zone="hat" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.hat} onClear={() => onClearZone('hat')}>
               {outfit.items.hat && <ZoneItem item={getItem(outfit.items.hat)} />}
             </DropZone>
           </div>
-          <div className="board-area top">
-            <DropZone label="Top" zone="top" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.top} onClear={() => onClearZone('top')}>
-              {outfit.items.top && <ZoneItem item={getItem(outfit.items.top)} />}
-            </DropZone>
-          </div>
           <div className="board-area outerwear">
             <DropZone label="Outerwear" zone="outerwear" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.outerwear} onClear={() => onClearZone('outerwear')}>
               {outfit.items.outerwear && <ZoneItem item={getItem(outfit.items.outerwear)} />}
+            </DropZone>
+          </div>
+          <div className="board-area top">
+            <DropZone label="Top" zone="top" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.top} onClear={() => onClearZone('top')}>
+              {outfit.items.top && <ZoneItem item={getItem(outfit.items.top)} />}
             </DropZone>
           </div>
           <div className="board-area bottom">
@@ -659,7 +669,23 @@ function Builder({ items, outfit, onDrop, onDragOver, onClearZone, onDragStart, 
         </div>
       </div>
     </section>
-@@ -630,51 +635,51 @@ function DropZone({ label, zone, children, onDrop, onDragOver, filled, onClear }
+  )
+}
+
+function DropZone({ label, zone, children, onDrop, onDragOver, filled, onClear }) {
+  return (
+    <div
+      className={`dropzone ${filled ? 'filled' : ''}`}
+      onDrop={e => onDrop(e, zone)}
+      onDragOver={onDragOver}
+    >
+      <span className="dz-label">{label}</span>
+      {filled && (
+        <button className="dz-clear" onClick={onClear} aria-label={`clear ${zone}`}>
+          <X size={14} />
+        </button>
+      )}
+      <div className="dz-content">{children}</div>
     </div>
   )
 }
@@ -685,7 +711,6 @@ function Gallery({ items, savedLooks, onDeleteLook }) {
             <div className="polaroid">
               <div className="polaroid-frame no-frame">
                 <div className="board board-static">
-                  {['outerwear','top','bottom','shoes','accessories'].map(zone => {
                   {['hat','top','outerwear','bottom','shoes','accessories'].map(zone => {
                     if (zone === 'accessories') return (
                       <div key={zone} className={`board-area ${zone}`}>
@@ -712,8 +737,10 @@ function Gallery({ items, savedLooks, onDeleteLook }) {
             </div>
           </div>
         ))}
-@@ -754,68 +759,70 @@ const CSS = `
-.item-sub{ color:var(--gray); font-size:12px }
+const CSS = `
+.item-card{ transform:scale(1.15); transform-origin:top left }
+.item-title{ font-size:18px; font-weight:700 }
+.item-sub{ color:var(--gray); font-size:14px }
 .item-tags .tag{ display:inline-block; border:2px solid var(--black); padding:2px 6px; margin:4px 4px 0 0; font-size:12px; font-weight:700; background:var(--white) }
 
 /* Drawer */
@@ -747,7 +774,7 @@ function Gallery({ items, savedLooks, onDeleteLook }) {
 
 /* Board layout */
 .board{ position:relative; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:160px 160px 140px; gap:10px }
-.board{ position:relative; width:420px; height:420px; margin:0 auto }
+.board{ position:relative; width:504px; height:504px; margin:0 auto }
 .board-static .dropzone{ pointer-events:none }
 .board-area.outerwear{ grid-column:1/2; grid-row:1/2 }
 .board-area.top{ grid-column:2/3; grid-row:1/2 }
@@ -757,12 +784,12 @@ function Gallery({ items, savedLooks, onDeleteLook }) {
 
 .dropzone{ position:relative; border:2px dashed var(--black); padding:6px; display:grid; place-items:center; transition:transform .08s, border-color .12s; background:var(--white) }
 .board-area{ position:absolute; display:flex; align-items:center; justify-content:center }
-.board-area.hat{ top:0; right:0; width:180px; height:180px; z-index:5 }
-.board-area.top{ top:120px; right:10px; width:260px; height:260px; z-index:4 }
-.board-area.outerwear{ top:120px; left:0; width:260px; height:260px; z-index:3 }
-.board-area.bottom{ bottom:0; right:20px; width:250px; height:250px; z-index:2 }
-.board-area.shoes{ bottom:0; left:0; width:250px; height:250px; z-index:1 }
-.board-area.accessories{ top:0; left:0; width:190px; min-height:140px; z-index:3 }
+.board-area.hat{ top:0; right:0; width:216px; height:216px; z-index:5 }
+.board-area.top{ top:144px; right:12px; width:312px; height:312px; z-index:4 }
+.board-area.outerwear{ top:144px; left:0; width:312px; height:312px; z-index:3 }
+.board-area.bottom{ bottom:0; right:24px; width:300px; height:300px; z-index:2 }
+.board-area.shoes{ bottom:0; left:0; width:300px; height:300px; z-index:1 }
+.board-area.accessories{ top:0; left:0; width:228px; min-height:168px; z-index:3 }
 
 .dropzone{ position:relative; border:2px dashed var(--light); padding:6px; display:grid; place-items:center; transition:transform .08s, border-color .12s; background:var(--white); width:100%; height:100% }
 .dropzone.filled{ border-style:solid }
@@ -787,7 +814,7 @@ function Gallery({ items, savedLooks, onDeleteLook }) {
 
 /* Saved Looks board size boost */
 .masonry-card .board.board-static {
-  transform: scale(1.3);
+  transform: scale(1.25);
   transform-origin: top left;
 }
 
