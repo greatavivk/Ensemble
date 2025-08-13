@@ -730,13 +730,18 @@ function Gallery({ items, savedLooks, onDeleteLook }) {
                 </div>
               </div>
             </div>
-            <div className="card-body">
-              <div className="card-title">{look.name}</div>
-              <div className="card-sub italic">Saved outfit</div>
-              <button className="btn danger" onClick={() => onDeleteLook(look.id)}><Trash2 size={16}/> Delete Look</button>
+              <div className="card-body">
+                <div className="card-title">{look.name}</div>
+                <div className="card-sub italic">Saved outfit</div>
+                <button className="btn danger" onClick={() => onDeleteLook(look.id)}><Trash2 size={16}/> Delete Look</button>
+              </div>
             </div>
-          </div>
         ))}
+      </div>
+    </section>
+  )
+}
+
 const CSS = `
 .item-card{ transform:scale(1.15); transform-origin:top left }
 .item-title{ font-size:18px; font-weight:700 }
@@ -828,3 +833,9 @@ const CSS = `
 .no-frame-img.small{ max-height:40px }
 .no-frame-img.small{ max-height:46px }
 `
+
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style')
+  style.textContent = CSS
+  document.head.appendChild(style)
+}
