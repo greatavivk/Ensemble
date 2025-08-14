@@ -297,10 +297,22 @@ function saveCurrentOutfit() {
   if (!outfit.items.length) return
   const rect = canvasRef.current?.getBoundingClientRect() || { width: 0, height: 0 }
   const id = `o${Date.now()}`
-  const ordered = [...outfit.items].sort((a, b) => a.z - b.z)
+  const ordered = [...outfit.items]
+    .sort((a, b) => a.z - b.z)
+    .map(o => {
+      const it = items.find(i => i.id === o.id)
+      return { ...o, imageUrl: it?.imageUrl, icon: it?.icon, name: it?.name }
+    })
   setSavedLooks(prev => [
     ...prev,
-    { id, name: outfit.name || 'Saved Look', seasons: outfit.seasons || [], items: structuredClone(ordered), w: rect.width, h: rect.height }
+    {
+      id,
+      name: outfit.name || 'Saved Look',
+      seasons: outfit.seasons || [],
+      items: ordered,
+      w: rect.width,
+      h: rect.height,
+    },
   ])
 }
 function deleteLook(id) { setSavedLooks(prev => prev.filter(l => l.id !== id)) }
@@ -372,7 +384,7 @@ onDeleteItem={deleteItem}
 )}
 
 {tab === 'gallery' && (
-<Gallery items={items} savedLooks={savedLooks} onDeleteLook={deleteLook} onUpdateLook={updateSavedLook} />
+<Gallery savedLooks={savedLooks} onDeleteLook={deleteLook} onUpdateLook={updateSavedLook} />
 )}
 </main>
 </div>
@@ -725,11 +737,10 @@ function Builder({ items, outfit, selectedItemId, setSelectedItemId, onDragOver,
 }
 
 
-function Gallery({ items, savedLooks, onDeleteLook, onUpdateLook }) {
+function Gallery({ savedLooks, onDeleteLook, onUpdateLook }) {
   const [activeSeasons, setActiveSeasons] = useState([])
   const [editingId, setEditingId] = useState(null)
-  const list = (savedLooks || []).filter(l => activeSeasons.length ? activeSeasons.every(s => l.seasons?.includes(s)) : true)
-  const getItem = id => items.find(i => i.id === id)
+  const list = (savedLooks || []).filter(l => (activeSeasons.length ? activeSeasons.every(s => l.seasons?.includes(s)) : true))
   const editing = savedLooks.find(l => l.id === editingId)
   return (
     <section className="section">
@@ -749,11 +760,21 @@ function Gallery({ items, savedLooks, onDeleteLook, onUpdateLook }) {
               <div className="polaroid-frame no-frame">
                 <div className="free-canvas static" style={{ width: look.w, height: look.h }}>
                   {look.items.map(o => {
-                    const it = getItem(o.id)
-                    const style = { position: 'absolute', left: o.x, top: o.y, width: 100 * o.scale, height: 100 * o.scale, zIndex: o.z }
+                    const style = {
+                      position: 'absolute',
+                      left: o.x,
+                      top: o.y,
+                      width: 100 * o.scale,
+                      height: 100 * o.scale,
+                      zIndex: o.z,
+                    }
                     return (
                       <div key={o.id} style={style}>
-                        {it?.imageUrl ? <img src={it.imageUrl} alt={it.name} className="no-frame-img" /> : iconByKey(it?.icon, { size: 36 })}
+                        {o.imageUrl ? (
+                          <img src={o.imageUrl} alt={o.name} className="no-frame-img" />
+                        ) : (
+                          iconByKey(o.icon, { size: 36 })
+                        )}
                       </div>
                     )
                   })}
