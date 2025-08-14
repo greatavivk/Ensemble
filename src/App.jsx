@@ -24,22 +24,12 @@ Filter,
 Star,
 Trash2,
 } from 'lucide-react'
+import { createClient } from '@supabase/supabase-js'
 
-// ----------------------- Supabase Toggle ---------------------
-const USE_SUPABASE = false // set true when env vars are configured in Vercel
-let supabase = null
-if (USE_SUPABASE) {
-try {
-// lazy import to avoid bundling errors if not used
-// eslint-disable-next-line no-new-func
-const createClient = (await import('@supabase/supabase-js')).createClient
-const URL = import.meta?.env?.VITE_SUPABASE_URL
-const KEY = import.meta?.env?.VITE_SUPABASE_ANON_KEY
-if (URL && KEY) supabase = createClient(URL, KEY)
-} catch (e) {
-console.warn('Supabase not initialized:', e)
-}
-}
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+)
 
 // ----------------------- Design Tokens ----------------------
 const COLORS = {
@@ -128,7 +118,7 @@ const EMPTY_OUTFIT = { id: 'o1', name: 'Untitled Look', seasons: [], items: [] }
 // ----------------------- App --------------------------------
 export default function App() {
 const [tab, setTab] = useState('dashboard')
-const [user, setUser] = useState(() => localStorage.getItem('ensemble.currentUser') || '')
+const [user, setUser] = useState(null)
 const [items, setItems] = useState([])
 const [activeCategory, setActiveCategory] = useState('all')
 const [activeSeasonsFilter, setActiveSeasonsFilter] = useState([])
@@ -140,27 +130,40 @@ const [selectedItemId, setSelectedItemId] = useState(null)
 const [learned, setLearned] = useState(getLearnedColors())
 useEffect(() => setLearned(getLearnedColors()), [])
 
-// load user data when login changes
+// auth state + initial load
 useEffect(() => {
-  if (!user) return
-  try {
-    const users = JSON.parse(localStorage.getItem('ensemble.users') || '{}')
-    const data = users[user] || { items: [], looks: [] }
-    setItems(data.items || [])
-    setSavedLooks(data.looks || [])
-    localStorage.setItem('ensemble.currentUser', user)
-  } catch { }
-}, [user])
+  const init = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    setUser(session?.user ?? null)
+  }
+  init()
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((_evt, session) => {
+    setUser(session?.user ?? null)
+  })
+  return () => subscription.unsubscribe()
+}, [])
 
-// persist user data
+// load items + looks when user logs in
 useEffect(() => {
   if (!user) return
-  try {
-    const users = JSON.parse(localStorage.getItem('ensemble.users') || '{}')
-    users[user] = { items, looks: savedLooks }
-    localStorage.setItem('ensemble.users', JSON.stringify(users))
-  } catch { }
-}, [items, savedLooks, user])
+  const loadData = async () => {
+    const { data: itemRows } = await supabase
+      .from('items')
+      .select('*')
+      .eq('user_id', user.id)
+    setItems(itemRows || [])
+    const { data: lookRows } = await supabase
+      .from('looks')
+      .select('*')
+      .eq('user_id', user.id)
+    setSavedLooks(lookRows || [])
+  }
+  loadData()
+}, [user])
 
 // drag data
 const dragDataRef = useRef(null)
@@ -224,49 +227,48 @@ return list
 const fileInputRef = useRef(null)
 function onUploadClick() { fileInputRef.current?.click() }
 async function onFileChange(e) {
-const file = e.target.files?.[0]; if (!file) return
-const id = `i${Date.now()}`
-// default icon by guessed type? we keep shirt by default; user can change category later
-const newItem = {
-id,
-name: 'Unnamed fashion piece',
-category: 'uncategorized',
-seasons: [],
-colorTags: [],
-occasions: [],
-description: '',
-usageCount: 0,
-dateAdded: new Date().toISOString().slice(0, 10),
-icon: 'shirt',
-}
-if (USE_SUPABASE && supabase) {
-try {
-const path = `anon/${id}-${Date.now()}`
-const { error: upErr } = await supabase.storage.from('items').upload(path, file, { upsert: true })
-if (upErr) throw upErr
-const { data: urlData } = supabase.storage.from('items').getPublicUrl(path)
-setItems(prev => [{ ...newItem, imageUrl: urlData.publicUrl, imagePath: path }, ...prev])
-await supabase.from('items').insert({
-id,
-name: newItem.name,
-category: newItem.category,
-seasons: newItem.seasons,
-color_tags: newItem.colorTags,
-occasions: newItem.occasions,
-description: newItem.description,
-usage_count: newItem.usageCount,
-image_url: urlData.publicUrl,
-image_path: path,
-})
-} catch (err) {
-console.error('Upload failed', err)
-// fallback to client-only preview
-const reader = new FileReader(); reader.onload = () => setItems(prev => [{ ...newItem, imageUrl: reader.result }, ...prev]); reader.readAsDataURL(file)
-}
-} else {
-const reader = new FileReader(); reader.onload = () => setItems(prev => [{ ...newItem, imageUrl: reader.result }, ...prev]); reader.readAsDataURL(file)
-}
-e.target.value = ''
+  const file = e.target.files?.[0]
+  if (!file || !user) return
+  const id = `i${Date.now()}`
+  const newItem = {
+    id,
+    name: 'Unnamed fashion piece',
+    category: 'uncategorized',
+    seasons: [],
+    colorTags: [],
+    occasions: [],
+    description: '',
+    usageCount: 0,
+    dateAdded: new Date().toISOString().slice(0, 10),
+    icon: 'shirt',
+  }
+  try {
+    const path = `${user.id}/${id}-${Date.now()}`
+    const { error: upErr } = await supabase.storage.from('items').upload(path, file, { upsert: true })
+    if (upErr) throw upErr
+    const { data: urlData } = supabase.storage.from('items').getPublicUrl(path)
+    const insertData = {
+      id,
+      user_id: user.id,
+      name: newItem.name,
+      category: newItem.category,
+      seasons: newItem.seasons,
+      color_tags: newItem.colorTags,
+      occasions: newItem.occasions,
+      description: newItem.description,
+      usage_count: newItem.usageCount,
+      image_url: urlData.publicUrl,
+      image_path: path,
+    }
+    const { data: row } = await supabase.from('items').insert(insertData).select().single()
+    setItems(prev => [row, ...prev])
+  } catch (err) {
+    console.error('Upload failed', err)
+    const reader = new FileReader()
+    reader.onload = () => setItems(prev => [{ ...newItem, imageUrl: reader.result }, ...prev])
+    reader.readAsDataURL(file)
+  }
+  e.target.value = ''
 }
 
 // save / delete items
@@ -276,42 +278,48 @@ const newColors = (updated.colorTags || []).filter(c => !!c && !getLearnedColors
 if (newColors.length) { const next = Array.from(new Set([...getLearnedColors(), ...newColors.map(c => c.toLowerCase())])); setLearnedColors(next); setLearned(next) }
 
 setItems(prev => prev.map(i => i.id === updated.id ? {
-...i,
-name: updated.name,
-category: updated.category,
-seasons: updated.seasons,
-colorTags: updated.colorTags,
-occasions: updated.occasions,
-description: updated.description || '',
+  ...i,
+  name: updated.name,
+  category: updated.category,
+  seasons: updated.seasons,
+  colorTags: updated.colorTags,
+  occasions: updated.occasions,
+  description: updated.description || '',
 } : i))
 
-if (USE_SUPABASE && supabase) {
+if (!user) return
 try {
-await supabase.from('items').update({
-name: updated.name,
-category: updated.category,
-seasons: updated.seasons,
-color_tags: updated.colorTags,
-occasions: updated.occasions,
-description: updated.description || '',
-}).eq('id', updated.id)
-} catch (e) { console.warn('SB update failed', e) }
+  await supabase
+    .from('items')
+    .update({
+      name: updated.name,
+      category: updated.category,
+      seasons: updated.seasons,
+      color_tags: updated.colorTags,
+      occasions: updated.occasions,
+      description: updated.description || '',
+    })
+    .eq('id', updated.id)
+    .eq('user_id', user.id)
+} catch (e) {
+  console.warn('SB update failed', e)
 }
 }
 async function deleteItem(id) {
 const item = items.find(i => i.id === id)
 setItems(prev => prev.filter(i => i.id !== id))
-if (USE_SUPABASE && supabase) {
+if (!user) return
 try {
-if (item?.imagePath) await supabase.storage.from('items').remove([item.imagePath])
-await supabase.from('items').delete().eq('id', id)
-} catch (e) { console.warn('SB delete failed', e) }
+  if (item?.imagePath) await supabase.storage.from('items').remove([item.imagePath])
+  await supabase.from('items').delete().eq('id', id).eq('user_id', user.id)
+} catch (e) {
+  console.warn('SB delete failed', e)
 }
 }
 
 // looks
-function saveCurrentOutfit() {
-  if (!outfit.items.length) return
+async function saveCurrentOutfit() {
+  if (!outfit.items.length || !user) return
   const rect = canvasRef.current?.getBoundingClientRect() || { width: 0, height: 0 }
   const id = `o${Date.now()}`
   const ordered = [...outfit.items]
@@ -320,21 +328,40 @@ function saveCurrentOutfit() {
       const it = items.find(i => i.id === o.id)
       return { ...o, imageUrl: it?.imageUrl, icon: it?.icon, name: it?.name }
     })
-  setSavedLooks(prev => [
-    ...prev,
-    {
-      id,
-      name: outfit.name || 'Saved Look',
-      seasons: outfit.seasons || [],
-      items: ordered,
-      w: rect.width,
-      h: rect.height,
-    },
-  ])
+  const payload = {
+    id,
+    user_id: user.id,
+    name: outfit.name || 'Saved Look',
+    seasons: outfit.seasons || [],
+    items: ordered,
+    w: rect.width,
+    h: rect.height,
+  }
+  try {
+    const { data: row } = await supabase.from('looks').insert(payload).select().single()
+    setSavedLooks(prev => [...prev, row])
+  } catch (e) {
+    console.warn('SB save look failed', e)
+    setSavedLooks(prev => [...prev, payload])
+  }
 }
-function deleteLook(id) { setSavedLooks(prev => prev.filter(l => l.id !== id)) }
-function updateSavedLook(id, changes) {
+async function deleteLook(id) {
+  setSavedLooks(prev => prev.filter(l => l.id !== id))
+  if (!user) return
+  try {
+    await supabase.from('looks').delete().eq('id', id).eq('user_id', user.id)
+  } catch (e) {
+    console.warn('SB delete look failed', e)
+  }
+}
+async function updateSavedLook(id, changes) {
   setSavedLooks(prev => prev.map(l => (l.id === id ? { ...l, ...changes } : l)))
+  if (!user) return
+  try {
+    await supabase.from('looks').update(changes).eq('id', id).eq('user_id', user.id)
+  } catch (e) {
+    console.warn('SB update look failed', e)
+  }
 }
 
 // word rotation for dashboard
@@ -343,7 +370,7 @@ useEffect(() => { const t = setInterval(() => setWordIdx(i => (i + 1) % WORDS.le
 if (!user) return (
   <div style={styles.app}>
     <style>{CSS}</style>
-    <Auth onLogin={setUser} />
+    <Auth />
   </div>
 )
 
@@ -359,7 +386,16 @@ return (
 <NavBtn label="Digital Closet" active={tab === 'closet'} onClick={() => setTab('closet')} />
 <NavBtn label="Outfit Builder" active={tab === 'builder'} onClick={() => setTab('builder')} />
 <NavBtn label="Saved Looks" active={tab === 'gallery'} onClick={() => setTab('gallery')} />
-<NavBtn label="Sign Out" active={false} onClick={() => { setUser(''); setTab('dashboard'); setItems([]); setSavedLooks([]); }} />
+<NavBtn
+  label="Sign Out"
+  active={false}
+  onClick={async () => {
+    await supabase.auth.signOut()
+    setTab('dashboard')
+    setItems([])
+    setSavedLooks([])
+  }}
+/>
 </nav>
 </header>
 
@@ -417,19 +453,26 @@ onDeleteItem={deleteItem}
 }
 
 // ----------------------- Components -------------------------
-function Auth({ onLogin }) {
-  const [name, setName] = useState('')
-  function submit(e) {
+function Auth() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  async function submit(e) {
     e.preventDefault()
-    const n = name.trim()
-    if (!n) return
-    onLogin(n)
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    if (error) alert(error.message)
   }
   return (
     <div className="auth">
       <form onSubmit={submit}>
         <h2 className="form-title">Sign In</h2>
-        <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="Username" />
+        <input className="input" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" />
+        <input
+          className="input"
+          type="password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          placeholder="Password"
+        />
         <button className="btn" type="submit">Enter</button>
       </form>
     </div>
