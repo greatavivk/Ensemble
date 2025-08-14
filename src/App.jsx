@@ -3,13 +3,14 @@
 // ✅ Closet: single Upload button; new items are `uncategorized`
 // ✅ Item Editor: Category select + free‑form Color/Occasion chips; Seasons checkboxes
 // ✅ Color tags: user types + Enter → chips; auto‑detect from Name ONLY when tags are empty; learns new colors
-// ✅ Builder + Saved Looks: fixed board layout (Outerwear, Top, Bottom, Shoes, Accessories)
+// ✅ Builder + Saved Looks: freeform canvas builder
 // ✅ Drag & Drop: disabled until category set (not `uncategorized`); accessories capped at 3
 // ✅ Delete Items + Delete Looks (best‑effort storage delete when Supabase on)
 // ✅ Dashboard: smoother BE/word animation + optional hero image with overlay
 // ✅ lucide-react: valid icons only; custom Jacket/Trousers SVGs
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { Rnd } from 'react-rnd'
 import {
 Footprints,
 GraduationCap,
@@ -122,7 +123,7 @@ return Array.from(new Set(found))
 }
 
 // ----------------------- Outfit Model -----------------------
-const EMPTY_OUTFIT = { id: 'o1', name: 'Untitled Look', items: { outerwear: null, hat: null, top: null, bottom: null, shoes: null, accessories: [] } }
+const EMPTY_OUTFIT = { id: 'o1', name: 'Untitled Look', items: [] }
 
 // ----------------------- App --------------------------------
 export default function App() {
@@ -146,27 +147,25 @@ e.dataTransfer.setData('text/plain', item.id)
 e.dataTransfer.effectAllowed = 'move'
 }
 function onDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }
-function onDrop(e, zone) {
-e.preventDefault(); const item = dragDataRef.current; if (!item) return
-const map = { outerwear: 'outerwear', hat: 'hats', top: 'tops', bottom: 'bottoms', shoes: 'shoes', accessories: 'accessories' }
-const valid = map[zone] === item.category || (zone === 'accessories' && item.category === 'accessories')
-if (!valid) return bounceInvalid(e.currentTarget)
-setOutfit(prev => {
-const next = structuredClone(prev)
-switch (zone) {
-case 'outerwear': next.items.outerwear = item.id; break
-case 'hat': next.items.hat = item.id; break
-case 'top': next.items.top = item.id; break
-case 'bottom': next.items.bottom = item.id; break
-case 'shoes': next.items.shoes = item.id; break
-case 'accessories': next.items.accessories = [...new Set([item.id, ...next.items.accessories])].slice(0, 3); break
-default: break
+function handleCanvasDrop(e) {
+  e.preventDefault();
+  const item = dragDataRef.current;
+  if (!item) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  setOutfit(prev => ({
+    ...prev,
+    items: [...prev.items, { id: item.id, x, y, scale: 1, z: prev.items.length + 1 }]
+  }));
+  snapOk(e.currentTarget);
 }
-return next
-})
-snapOk(e.currentTarget)
+function updateItemPosition(id, changes) {
+  setOutfit(prev => ({
+    ...prev,
+    items: prev.items.map(o => (o.id === id ? { ...o, ...changes } : o))
+  }));
 }
-function bounceInvalid(el) { el.classList.remove('anim-bounce'); void el.offsetWidth; el.classList.add('anim-bounce') }
 function snapOk(el) { el.classList.remove('anim-snap'); void el.offsetWidth; el.classList.add('anim-snap') }
 
 // filters
@@ -268,10 +267,9 @@ await supabase.from('items').delete().eq('id', id)
 
 // looks
 function saveCurrentOutfit() {
-const hasAny = outfit.items.outerwear || outfit.items.hat || outfit.items.top || outfit.items.bottom || outfit.items.shoes || outfit.items.accessories.length
-if (!hasAny) return
-const id = `o${Date.now()}`
-setSavedLooks(prev => [...prev, { id, name: 'Saved Look', items: structuredClone(outfit.items) }])
+  if (!outfit.items.length) return
+  const id = `o${Date.now()}`
+  setSavedLooks(prev => [...prev, { id, name: 'Saved Look', items: structuredClone(outfit.items) }])
 }
 function deleteLook(id) { setSavedLooks(prev => prev.filter(l => l.id !== id)) }
 
@@ -324,10 +322,10 @@ onDeleteItem={deleteItem}
 <Builder
 items={items}
 outfit={outfit}
-onDrop={onDrop}
 onDragOver={onDragOver}
 onDragStart={onDragStart}
-onClearZone={(zone) => setOutfit(prev => { const next = structuredClone(prev); if (zone === 'accessories') next.items.accessories = []; else next.items[zone] = null; return next })}
+handleCanvasDrop={handleCanvasDrop}
+updateItemPosition={updateItemPosition}
 onSaveOutfit={saveCurrentOutfit}
 />
 )}
@@ -561,126 +559,103 @@ return (
 )
 }
 
-function Builder({ items, outfit, onDrop, onDragOver, onClearZone, onDragStart, onSaveOutfit }) {
-const getItem = id => items.find(i => i.id === id)
-return (
-<section className="section builder">
-<div className="builder-left">
-<h2 className="section-title"><span className="section-num">03</span> Categories</h2>
-<p className="muted">Drag items into the board boxes.</p>
-<div className="filmstrip">
-{items.map(i => (
-<div key={i.id} className={`film-cell ${i.category==='uncategorized'?'dim':''}`} draggable={i.category!=='uncategorized'} onDragStart={e => onDragStart?.(e, i)}>
-<div className="film-frame">
-{i.imageUrl ? <img src={i.imageUrl} alt="img" className="no-frame-img small" /> : iconByKey(i.icon, { size: 28 })}
-</div>
-<div className="film-caption">{i.name}</div>
-</div>
-))}
-</div>
-</div>
-
-{/* Board center — fixed layout like your reference */}
-<div className="builder-center">
-<div className="board">
-<div className="board-area outerwear">
-<DropZone label="Outerwear" zone="outerwear" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.outerwear} onClear={() => onClearZone('outerwear')}>
-{outfit.items.outerwear && <ZoneItem item={getItem(outfit.items.outerwear)} />}
-</DropZone>
-</div>
-<div className="board-area top">
-<DropZone label="Top" zone="top" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.top} onClear={() => onClearZone('top')}>
-{outfit.items.top && <ZoneItem item={getItem(outfit.items.top)} />}
-</DropZone>
-</div>
-<div className="board-area bottom">
-<DropZone label="Bottom" zone="bottom" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.bottom} onClear={() => onClearZone('bottom')}>
-{outfit.items.bottom && <ZoneItem item={getItem(outfit.items.bottom)} />}
-</DropZone>
-</div>
-<div className="board-area shoes">
-<DropZone label="Shoes" zone="shoes" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.shoes} onClear={() => onClearZone('shoes')}>
-{outfit.items.shoes && <ZoneItem item={getItem(outfit.items.shoes)} />}
-</DropZone>
-</div>
-<div className="board-area accessories">
-<DropZone label="Accessories" zone="accessories" onDrop={onDrop} onDragOver={onDragOver} filled={outfit.items.accessories.length>0} onClear={() => onClearZone('accessories')}>
-{outfit.items.accessories.map(id => { const it = getItem(id); return <ZoneItem key={id} item={it} small /> })}
-</DropZone>
-</div>
-</div>
-</div>
-
-<div className="builder-right">
-<div className="preview">
-<div className="preview-header"><div className="preview-title">Current Look</div></div>
-<div className="preview-actions"><button className="btn" onClick={onSaveOutfit}>Save Look</button></div>
-</div>
-</div>
-</section>
-)
+function DraggableResizable({ data, onUpdate, children }) {
+  return (
+    <Rnd
+      size={{ width: 100 * data.scale, height: 100 * data.scale }}
+      position={{ x: data.x, y: data.y }}
+      onDragStop={(e, d) => onUpdate({ x: d.x, y: d.y })}
+      onResizeStop={(e, dir, ref, delta, pos) => {
+        onUpdate({
+          scale: ref.offsetWidth / 100,
+          x: pos.x,
+          y: pos.y
+        })
+      }}
+      style={{ zIndex: data.z, position: 'absolute' }}
+    >
+      {children}
+    </Rnd>
+  )
 }
 
-function DropZone({ label, zone, children, onDrop, onDragOver, filled, onClear }) {
-return (
-<div className={`dropzone ${filled ? 'filled' : ''}`} onDragOver={onDragOver} onDrop={(e) => onDrop(e, zone)} tabIndex={0} aria-label={`${label} drop zone`}>
-<div className="dz-label">{label}</div>
-<button className="dz-clear" onClick={onClear} title="Clear"><X size={12} /></button>
-<div className="dz-content">{children}</div>
-</div>
-)
+function Builder({ items, outfit, onDragOver, onDragStart, handleCanvasDrop, updateItemPosition, onSaveOutfit }) {
+  const getItem = id => items.find(i => i.id === id)
+  return (
+    <section className="section builder">
+      <div className="builder-left">
+        <h2 className="section-title"><span className="section-num">03</span> Categories</h2>
+        <p className="muted">Drag items onto the canvas.</p>
+        <div className="filmstrip">
+          {items.map(i => (
+            <div key={i.id} className={`film-cell ${i.category==='uncategorized'?'dim':''}`} draggable={i.category!=='uncategorized'} onDragStart={e => onDragStart?.(e, i)}>
+              <div className="film-frame">
+                {i.imageUrl ? <img src={i.imageUrl} alt="img" className="no-frame-img small" /> : iconByKey(i.icon, { size: 28 })}
+              </div>
+              <div className="film-caption">{i.name}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="builder-center">
+        <div className="free-canvas" onDragOver={onDragOver} onDrop={handleCanvasDrop}>
+          {outfit.items.map(o => {
+            const it = getItem(o.id)
+            return (
+              <DraggableResizable key={o.id} data={o} onUpdate={changes => updateItemPosition(o.id, changes)}>
+                {it?.imageUrl ? <img src={it.imageUrl} alt={it.name} /> : iconByKey(it.icon, { size: 36 })}
+              </DraggableResizable>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="builder-right">
+        <div className="preview">
+          <div className="preview-header"><div className="preview-title">Current Look</div></div>
+          <div className="preview-actions"><button className="btn" onClick={onSaveOutfit}>Save Look</button></div>
+        </div>
+      </div>
+    </section>
+  )
 }
 
-function ZoneItem({ item, small }) {
-if (!item) return null
-return (
-<div className={`zone-item ${small ? 'small' : ''}`} title={item.name}>
-{item.imageUrl ? <img src={item.imageUrl} alt={item.name} className={`no-frame-img ${small ? 'small' : ''}`} /> : iconByKey(item.icon, { size: small ? 18 : 28 })}
-<span className="zone-name">{item.name}</span>
-</div>
-)
-}
 
 function Gallery({ items, savedLooks, onDeleteLook }) {
-const list = savedLooks || []
-return (
-<section className="section">
-<h2 className="section-title"><span className="section-num">04</span> Saved Looks</h2>
-<div className="masonry">
-{list.map(look => (
-<div key={look.id} className="masonry-card">
-<div className="polaroid">
-<div className="polaroid-frame no-frame">
-<div className="board board-static">
-{['outerwear','top','bottom','shoes','accessories'].map(zone => {
-if (zone === 'accessories') return (
-<div key={zone} className={`board-area ${zone}`}>
-<div className="acc-stack">
-{(look.items.accessories || []).map(aid => { const acc = items.find(i => i.id === aid); return <span key={aid} className="tag">{acc?.name || 'Accessory'}</span> })}
-</div>
-</div>
-)
-const id = look.items[zone]
-const it = id && items.find(i => i.id === id)
-return (
-<div key={zone} className={`board-area ${zone}`}>
-{it ? (it.imageUrl ? <img src={it.imageUrl} alt={it.name} className="no-frame-img" /> : iconByKey(it.icon, { size: 36 })) : <div className="look-empty" />}
-</div>
-)
-})}
-</div>
-</div>
-</div>
-<div className="card-body">
-<div className="card-title">{look.name}</div>
-<div className="card-sub italic">Saved outfit</div>
-<button className="btn danger" onClick={() => onDeleteLook(look.id)}><Trash2 size={16}/> Delete Look</button>
-</div>
-</div>
-))}
-</div>
-</section>
-)
+  const list = savedLooks || []
+  const getItem = id => items.find(i => i.id === id)
+  return (
+    <section className="section">
+      <h2 className="section-title"><span className="section-num">04</span> Saved Looks</h2>
+      <div className="masonry">
+        {list.map(look => (
+          <div key={look.id} className="masonry-card">
+            <div className="polaroid">
+              <div className="polaroid-frame no-frame">
+                <div className="free-canvas static">
+                  {look.items.map(o => {
+                    const it = getItem(o.id)
+                    const style = { position: 'absolute', left: o.x, top: o.y, width: 100 * o.scale, height: 100 * o.scale, zIndex: o.z }
+                    return (
+                      <div key={o.id} style={style}>
+                        {it?.imageUrl ? <img src={it.imageUrl} alt={it.name} className="no-frame-img" /> : iconByKey(it?.icon, { size: 36 })}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+            <div className="card-body">
+              <div className="card-title">{look.name}</div>
+              <div className="card-sub italic">Saved outfit</div>
+              <button className="btn danger" onClick={() => onDeleteLook(look.id)}><Trash2 size={16}/> Delete Look</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
 }
 
 // ----------------------- Styles ------------------------------
@@ -781,24 +756,10 @@ const CSS = `
 .film-frame{ border:2px solid var(--black); height:60px; display:grid; place-items:center; box-shadow:4px 4px 0 var(--black) }
 .film-caption{ font-size:12px; text-align:center; margin-top:6px }
 
-/* Board layout */
-.board{ position:relative; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:160px 160px 140px; gap:10px }
-.board-static .dropzone{ pointer-events:none }
-.board-area.outerwear{ grid-column:1/2; grid-row:1/2 }
-.board-area.top{ grid-column:2/3; grid-row:1/2 }
-.board-area.bottom{ grid-column:2/3; grid-row:2/3 }
-.board-area.shoes{ grid-column:1/2; grid-row:3/4 }
-.board-area.accessories{ grid-column:2/3; grid-row:3/4 }
-
-.dropzone{ position:relative; border:2px dashed var(--black); padding:6px; display:grid; place-items:center; transition:transform .08s, border-color .12s; background:var(--white) }
-.dropzone.filled{ border-style:solid }
-.dz-label{ position:absolute; top:-10px; left:8px; background:var(--white); padding:0 6px; font-size:12px; letter-spacing:1px }
-.dz-clear{ position:absolute; top:4px; right:4px; border:2px solid var(--black); background:var(--white); cursor:pointer; padding:2px }
-.dz-content{ display:inline-flex; gap:8px; align-items:center }
-
-.zone-item{ display:inline-flex; align-items:center; gap:8px; padding:4px 8px; border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black) }
-.zone-item.small{ transform:scale(.9) }
-.zone-name{ font-size:14px }
+/* Free canvas */
+.free-canvas{ position:relative; width:100%; height:400px; border:2px dashed var(--black); background:var(--white) }
+.free-canvas.static{ pointer-events:none }
+.free-canvas img{ width:100%; height:100%; object-fit:contain }
 
 @keyframes snap{ 0%{transform:scale(.98)} 100%{transform:scale(1)} }
 @keyframes bounce{ 0%{transform:translateY(0)} 30%{transform:translateY(-6px)} 60%{transform:translateY(0)} 100%{transform:translateY(0)} }
@@ -813,8 +774,6 @@ const CSS = `
 
 .masonry{ column-count:3; column-gap:12px }
 .masonry-card{ break-inside:avoid; border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); margin-bottom:12px }
-.look-empty{ width:36px; height:36px; border:1px dashed var(--black) }
-.acc-stack{ display:flex; gap:6px; flex-wrap:wrap }
 
 .no-frame-img{ max-width:100%; max-height:100%; object-fit:contain; display:block; background:transparent }
 .no-frame-img.small{ max-height:40px }
