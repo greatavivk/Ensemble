@@ -367,18 +367,14 @@ return (
 }
 
 function Dashboard({ items, heroWord, goToCloset }) {
-const DEFAULT_BG = 'https://i.pinimg.com/1200x/f9/74/0b/f9740b79ef42a33a3ccba2b913654573.jpg'
-const [bgUrl, setBgUrl] = useState(() => { try { return localStorage.getItem('ensemble.heroUrl') || DEFAULT_BG } catch { return DEFAULT_BG } })
-function setHeroFromPrompt() {
-const u = window.prompt('Paste a direct image URL (.jpg/.png works best):', bgUrl)
-if (u != null) { setBgUrl(u); try { localStorage.setItem('ensemble.heroUrl', u) } catch { } }
-}
-const heroStyle = bgUrl ? { backgroundImage: `url(${bgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.6)' } : {}
+const HERO_BG = 'https://i.pinimg.com/1200x/f9/74/0b/f9740b79ef42a33a3ccba2b913654573.jpg'
+const heroStyle = { backgroundImage: `url(${HERO_BG})`, backgroundSize: 'cover', backgroundPosition: 'center' }
 const recent = (items || []).slice(0, 6)
 return (
 <section className="section">
-<div className={`hero ${bgUrl ? 'with-bg' : ''}`} style={heroStyle}>
-{bgUrl && <div className="hero-overlay" aria-hidden="true" />}
+<div className="hero with-bg" style={heroStyle}>
+<div className="hero-overlay" aria-hidden="true" />
+<div className="hero-content">
 <h1 className="hero-title">
 <span className="hero-be">BE</span>
 <span className="hero-word"><span key={heroWord} className="swap-word">{heroWord}</span></span>
@@ -386,7 +382,7 @@ return (
 <p className="hero-sub">High‑contrast editorial tools for decisive dressing.</p>
 <div className="cta-row">
 <button className="btn" onClick={goToCloset}>Go to Closet</button>
-<button className="btn" onClick={setHeroFromPrompt}>Set hero image</button>
+</div>
 </div>
 </div>
 
@@ -746,14 +742,15 @@ const CSS = `
 
 .hero{ position:relative; color:var(--white); padding:28px; box-shadow:4px 4px 0 var(--black) inset; background:var(--black); min-height:220px; display:flex; flex-direction:column; justify-content:center }
 .hero.with-bg{ background-color:#000; background-blend-mode:normal }
-.hero-overlay{ position:absolute; inset:0; background:rgba(0,0,0,.5); pointer-events:none }
-.hero-title{ font-size:32px; display:flex; flex-direction:column; gap:6px; z-index:1 }
+.hero-overlay{ position:absolute; inset:0; background:rgba(0,0,0,.5); pointer-events:none; z-index:0 }
+.hero-content{ position:relative; z-index:1 }
+.hero-title{ font-size:32px; display:flex; flex-direction:column; gap:6px }
 .hero-be{ font-weight:700; letter-spacing:4px }
 .hero-word{ font-style:italic; line-height:1 }
 .swap-word{ display:inline-block; animation:wordfade .45s ease }
 @keyframes wordfade{ 0%{opacity:0; transform:translateY(6px)} 100%{opacity:1; transform:translateY(0)} }
-.hero-sub{ font-size:16px; color:var(--off); z-index:1 }
-.cta-row{ display:flex; gap:8px; margin-top:12px; z-index:1 }
+.hero-sub{ font-size:16px; color:var(--off) }
+.cta-row{ display:flex; gap:8px; margin-top:12px }
 
 .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:16px }
 .card{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); display:flex; gap:10px; padding:12px; transition:transform .1s }
