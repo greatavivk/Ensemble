@@ -123,21 +123,27 @@ return Array.from(new Set(found))
 }
 
 // ----------------------- Outfit Model -----------------------
-const EMPTY_OUTFIT = { id: 'o1', name: 'Untitled Look', items: [] }
+const EMPTY_OUTFIT = { id: 'o1', name: 'Untitled Look', seasons: [], items: [] }
 
 // ----------------------- App --------------------------------
 export default function App() {
 const [tab, setTab] = useState('dashboard')
-const [items, setItems] = useState([]) // start empty (no demo)
+const [items, setItems] = useState(() => {
+  try { return JSON.parse(localStorage.getItem('ensemble.items') || '[]') } catch { return [] }
+})
 const [activeCategory, setActiveCategory] = useState('all')
 const [activeSeasonsFilter, setActiveSeasonsFilter] = useState([])
 const [outfit, setOutfit] = useState(EMPTY_OUTFIT)
-const [savedLooks, setSavedLooks] = useState([])
+const [savedLooks, setSavedLooks] = useState(() => {
+  try { return JSON.parse(localStorage.getItem('ensemble.looks') || '[]') } catch { return [] }
+})
 const [selectedItemId, setSelectedItemId] = useState(null)
 
 // learned colors cache (for suggestions)
 const [learned, setLearned] = useState(getLearnedColors())
 useEffect(() => setLearned(getLearnedColors()), [])
+useEffect(() => { try { localStorage.setItem('ensemble.items', JSON.stringify(items)) } catch { } }, [items])
+useEffect(() => { try { localStorage.setItem('ensemble.looks', JSON.stringify(savedLooks)) } catch { } }, [savedLooks])
 
 // drag data
 const dragDataRef = useRef(null)
@@ -294,10 +300,13 @@ function saveCurrentOutfit() {
   const ordered = [...outfit.items].sort((a, b) => a.z - b.z)
   setSavedLooks(prev => [
     ...prev,
-    { id, name: 'Saved Look', items: structuredClone(ordered), w: rect.width, h: rect.height }
+    { id, name: outfit.name || 'Saved Look', seasons: outfit.seasons || [], items: structuredClone(ordered), w: rect.width, h: rect.height }
   ])
 }
 function deleteLook(id) { setSavedLooks(prev => prev.filter(l => l.id !== id)) }
+function updateSavedLook(id, changes) {
+  setSavedLooks(prev => prev.map(l => (l.id === id ? { ...l, ...changes } : l)))
+}
 
 // word rotation for dashboard
 const [wordIdx, setWordIdx] = useState(0)
@@ -358,11 +367,12 @@ onDeleteItem={deleteItem}
         removeOutfitItem={removeOutfitItem}
         onSaveOutfit={saveCurrentOutfit}
         canvasRef={canvasRef}
+        setOutfit={setOutfit}
       />
 )}
 
 {tab === 'gallery' && (
-<Gallery items={items} savedLooks={savedLooks} onDeleteLook={deleteLook} />
+<Gallery items={items} savedLooks={savedLooks} onDeleteLook={deleteLook} onUpdateLook={updateSavedLook} />
 )}
 </main>
 </div>
@@ -607,7 +617,7 @@ function DraggableResizable({ data, onUpdate, onSelect, children }) {
   )
 }
 
-function Builder({ items, outfit, selectedItemId, setSelectedItemId, onDragOver, onDragStart, handleCanvasDrop, updateOutfitItem, moveLayer, removeOutfitItem, onSaveOutfit, canvasRef }) {
+function Builder({ items, outfit, selectedItemId, setSelectedItemId, onDragOver, onDragStart, handleCanvasDrop, updateOutfitItem, moveLayer, removeOutfitItem, onSaveOutfit, canvasRef, setOutfit }) {
   const getItem = id => items.find(i => i.id === id)
   const selectedItem = outfit.items.find(i => i.id === selectedItemId)
   const itemsSortedByZ = [...outfit.items].sort((a, b) => b.z - a.z)
@@ -651,6 +661,28 @@ function Builder({ items, outfit, selectedItemId, setSelectedItemId, onDragOver,
       </div>
 
       <div className="builder-right">
+        <div className="form-row">
+          <div className="form-label">Look Name</div>
+          <input value={outfit.name} onChange={e => setOutfit(prev => ({ ...prev, name: e.target.value }))} />
+        </div>
+        <div className="filters">
+          {ALL_SEASONS.map(s => (
+            <label key={s} className={`badge ${outfit.seasons?.includes(s) ? 'active' : ''}`}>
+              <input
+                type="checkbox"
+                checked={outfit.seasons?.includes(s) || false}
+                onChange={() =>
+                  setOutfit(prev => {
+                    const list = prev.seasons || []
+                    const next = list.includes(s) ? list.filter(x => x !== s) : [...list, s]
+                    return { ...prev, seasons: next }
+                  })
+                }
+              />
+              {s}
+            </label>
+          ))}
+        </div>
         {selectedItem && (
           <div className="size-control">
             <input
@@ -693,12 +725,23 @@ function Builder({ items, outfit, selectedItemId, setSelectedItemId, onDragOver,
 }
 
 
-function Gallery({ items, savedLooks, onDeleteLook }) {
-  const list = savedLooks || []
+function Gallery({ items, savedLooks, onDeleteLook, onUpdateLook }) {
+  const [activeSeasons, setActiveSeasons] = useState([])
+  const [editingId, setEditingId] = useState(null)
+  const list = (savedLooks || []).filter(l => activeSeasons.length ? activeSeasons.every(s => l.seasons?.includes(s)) : true)
   const getItem = id => items.find(i => i.id === id)
+  const editing = savedLooks.find(l => l.id === editingId)
   return (
     <section className="section">
       <h2 className="section-title"><span className="section-num">04</span> Saved Looks</h2>
+      <div className="filters">
+        {ALL_SEASONS.map(s => (
+          <label key={s} className={`badge ${activeSeasons.includes(s) ? 'active' : ''}`}>
+            <input type="checkbox" checked={activeSeasons.includes(s)} onChange={() => setActiveSeasons(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])} />
+            {s}
+          </label>
+        ))}
+      </div>
       <div className="masonry">
         {list.map(look => (
           <div key={look.id} className="masonry-card">
@@ -719,13 +762,53 @@ function Gallery({ items, savedLooks, onDeleteLook }) {
             </div>
             <div className="card-body">
               <div className="card-title">{look.name}</div>
-              <div className="card-sub italic">Saved outfit</div>
+              <div className="card-sub italic">{look.seasons?.join(', ') || 'Saved outfit'}</div>
+              <button className="btn" onClick={() => setEditingId(look.id)}>Edit</button>
               <button className="btn danger" onClick={() => onDeleteLook(look.id)}><Trash2 size={16}/> Delete Look</button>
             </div>
           </div>
         ))}
       </div>
+      {editing && (
+        <LookEditor
+          look={editing}
+          onClose={() => setEditingId(null)}
+          onSave={changes => { onUpdateLook(editing.id, changes); setEditingId(null) }}
+        />
+      )}
     </section>
+  )
+}
+
+function LookEditor({ look, onSave, onClose }) {
+  const [name, setName] = useState(look.name)
+  const [seasons, setSeasons] = useState(look.seasons || [])
+  function toggleSeason(s) { setSeasons(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]) }
+  return (
+    <div className="drawer">
+      <div className="drawer-head">
+        <div className="form-title">Edit Look</div>
+        <button className="icon-btn" onClick={onClose}><X size={16} /></button>
+      </div>
+      <div className="form-row">
+        <div className="form-label">Name</div>
+        <input value={name} onChange={e => setName(e.target.value)} />
+      </div>
+      <div className="form-row">
+        <div className="form-label">Seasons</div>
+        <div className="filters">
+          {ALL_SEASONS.map(s => (
+            <label key={s} className={`badge ${seasons.includes(s) ? 'active' : ''}`}>
+              <input type="checkbox" checked={seasons.includes(s)} onChange={() => toggleSeason(s)} />
+              {s}
+            </label>
+          ))}
+        </div>
+      </div>
+      <div className="drawer-actions">
+        <button className="btn" onClick={() => onSave({ name, seasons })}>Save</button>
+      </div>
+    </div>
   )
 }
 
