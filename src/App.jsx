@@ -461,12 +461,10 @@ iconByKey(i.icon, { size: 40 })
 )}
 </div>
 </div>
-<div className="item-meta">
-<div className="item-title">{i.name}</div>
-<div className="item-sub">{i.category}</div>
-<div className="item-tags">
-{i.colorTags?.map((c, idx) => <span key={idx} className="tag">{c}</span>)}
-{i.seasons?.map((s, idx) => <span key={s+idx} className="tag">{s}</span>)}
+<div className="item-overlay">
+<div className="overlay-title">{i.name}</div>
+<div className="overlay-tags">
+{i.seasons?.map((s, idx) => <span key={s+idx} className="overlay-tag">{s}</span>)}
 </div>
 </div>
 </div>
@@ -792,16 +790,18 @@ const CSS = `
 .btn.danger{ border-color:var(--red); color:var(--red) }
 .icon-btn{ border:2px solid var(--black); background:var(--white); padding:4px; cursor:pointer }
 
-.item-card{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); cursor:grab }
+.item-card{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); cursor:grab; position:relative; overflow:visible }
 .item-card:active{ cursor:grabbing }
 .item-card.hint{ opacity:.85; outline:2px dashed var(--red) }
 .polaroid{ background:var(--white); border-bottom:2px solid var(--black); padding:8px }
 .polaroid-frame{ border:2px solid var(--black); height:120px; display:grid; place-items:center }
 .polaroid-frame.no-frame{ border:none; box-shadow:none }
-.item-meta{ padding:10px }
-.item-title{ font-weight:700 }
-.item-sub{ color:var(--gray); font-size:12px }
-.item-tags .tag{ display:inline-block; border:2px solid var(--black); padding:2px 6px; margin:4px 4px 0 0; font-size:12px; font-weight:700; background:var(--white) }
+.masonry-card .polaroid-frame{ height:auto; overflow:hidden }
+.item-overlay{ position:absolute; inset:0; background:rgba(0,0,0,.6); color:var(--white); display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; opacity:0; transition:opacity .3s; pointer-events:none }
+.item-card:hover .item-overlay{ opacity:1 }
+.overlay-title{ font-weight:700; margin-bottom:4px }
+.overlay-tags{ display:flex; gap:4px; flex-wrap:wrap; justify-content:center }
+.overlay-tag{ border:1px solid var(--white); padding:2px 6px; font-size:12px; font-weight:700; color:var(--white) }
 
 /* Drawer */
 .drawer{ position:fixed; right:16px; bottom:16px; width:360px; max-width:calc(100vw - 32px); background:var(--white); border:2px solid var(--black); box-shadow:6px 6px 0 var(--black); padding:12px; z-index:20 }
@@ -837,7 +837,7 @@ const CSS = `
 
 /* Free canvas */
 .free-canvas{ position:relative; width:100%; height:400px; border:2px dashed var(--black); background:var(--white) }
-.free-canvas.static{ pointer-events:none }
+.free-canvas.static{ pointer-events:none; border:none; overflow:hidden }
 .free-canvas img{ width:100%; height:100%; object-fit:contain; pointer-events:none }
 
 @keyframes snap{ 0%{transform:scale(.98)} 100%{transform:scale(1)} }
