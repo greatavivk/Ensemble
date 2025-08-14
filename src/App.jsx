@@ -128,22 +128,39 @@ const EMPTY_OUTFIT = { id: 'o1', name: 'Untitled Look', seasons: [], items: [] }
 // ----------------------- App --------------------------------
 export default function App() {
 const [tab, setTab] = useState('dashboard')
-const [items, setItems] = useState(() => {
-  try { return JSON.parse(localStorage.getItem('ensemble.items') || '[]') } catch { return [] }
-})
+const [user, setUser] = useState(() => localStorage.getItem('ensemble.currentUser') || '')
+const [items, setItems] = useState([])
 const [activeCategory, setActiveCategory] = useState('all')
 const [activeSeasonsFilter, setActiveSeasonsFilter] = useState([])
 const [outfit, setOutfit] = useState(EMPTY_OUTFIT)
-const [savedLooks, setSavedLooks] = useState(() => {
-  try { return JSON.parse(localStorage.getItem('ensemble.looks') || '[]') } catch { return [] }
-})
+const [savedLooks, setSavedLooks] = useState([])
 const [selectedItemId, setSelectedItemId] = useState(null)
 
 // learned colors cache (for suggestions)
 const [learned, setLearned] = useState(getLearnedColors())
 useEffect(() => setLearned(getLearnedColors()), [])
-useEffect(() => { try { localStorage.setItem('ensemble.items', JSON.stringify(items)) } catch { } }, [items])
-useEffect(() => { try { localStorage.setItem('ensemble.looks', JSON.stringify(savedLooks)) } catch { } }, [savedLooks])
+
+// load user data when login changes
+useEffect(() => {
+  if (!user) return
+  try {
+    const users = JSON.parse(localStorage.getItem('ensemble.users') || '{}')
+    const data = users[user] || { items: [], looks: [] }
+    setItems(data.items || [])
+    setSavedLooks(data.looks || [])
+    localStorage.setItem('ensemble.currentUser', user)
+  } catch { }
+}, [user])
+
+// persist user data
+useEffect(() => {
+  if (!user) return
+  try {
+    const users = JSON.parse(localStorage.getItem('ensemble.users') || '{}')
+    users[user] = { items, looks: savedLooks }
+    localStorage.setItem('ensemble.users', JSON.stringify(users))
+  } catch { }
+}, [items, savedLooks, user])
 
 // drag data
 const dragDataRef = useRef(null)
@@ -323,6 +340,12 @@ function updateSavedLook(id, changes) {
 // word rotation for dashboard
 const [wordIdx, setWordIdx] = useState(0)
 useEffect(() => { const t = setInterval(() => setWordIdx(i => (i + 1) % WORDS.length), 1600); return () => clearInterval(t) }, [])
+if (!user) return (
+  <div style={styles.app}>
+    <style>{CSS}</style>
+    <Auth onLogin={setUser} />
+  </div>
+)
 
 return (
 <div style={styles.app}>
@@ -336,6 +359,7 @@ return (
 <NavBtn label="Digital Closet" active={tab === 'closet'} onClick={() => setTab('closet')} />
 <NavBtn label="Outfit Builder" active={tab === 'builder'} onClick={() => setTab('builder')} />
 <NavBtn label="Saved Looks" active={tab === 'gallery'} onClick={() => setTab('gallery')} />
+<NavBtn label="Sign Out" active={false} onClick={() => { setUser(''); setTab('dashboard'); setItems([]); setSavedLooks([]); }} />
 </nav>
 </header>
 
@@ -344,6 +368,7 @@ return (
 <Dashboard
 items={items}
 heroWord={WORDS[wordIdx]}
+looks={savedLooks}
 goToCloset={() => setTab('closet')}
 />
 )}
@@ -392,13 +417,32 @@ onDeleteItem={deleteItem}
 }
 
 // ----------------------- Components -------------------------
+function Auth({ onLogin }) {
+  const [name, setName] = useState('')
+  function submit(e) {
+    e.preventDefault()
+    const n = name.trim()
+    if (!n) return
+    onLogin(n)
+  }
+  return (
+    <div className="auth">
+      <form onSubmit={submit}>
+        <h2 className="form-title">Sign In</h2>
+        <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="Username" />
+        <button className="btn" type="submit">Enter</button>
+      </form>
+    </div>
+  )
+}
+
 function NavBtn({ label, active, onClick }) {
 return (
 <button className={`nav-btn ${active ? 'active' : ''}`} onClick={onClick}>{label}</button>
 )
 }
 
-function Dashboard({ items, heroWord, goToCloset }) {
+function Dashboard({ items, looks, heroWord, goToCloset }) {
 const HERO_BG = 'https://i.pinimg.com/1200x/f9/74/0b/f9740b79ef42a33a3ccba2b913654573.jpg'
 const heroStyle = { backgroundImage: `url(${HERO_BG})`, backgroundSize: 'cover', backgroundPosition: 'center' }
 const recent = (items || []).slice(0, 6)
@@ -436,7 +480,7 @@ return (
 <h2 className="section-title"><span className="section-num">02</span> Stats</h2>
 <div className="stats">
 <div className="stat-box"><div className="stat-num">{items?.length || 0}</div><div className="stat-label">Items</div></div>
-<div className="stat-box"><div className="stat-num">{0 + ''}</div><div className="stat-label">Looks</div></div>
+<div className="stat-box"><div className="stat-num">{looks?.length || 0}</div><div className="stat-label">Looks</div></div>
 <div className="stat-box"><div className="stat-num">—</div><div className="stat-label">Last Added</div></div>
 </div>
 </section>
@@ -938,6 +982,10 @@ const CSS = `
 .layer-row{ display:flex; justify-content:space-between; align-items:center; padding:4px 8px; cursor:pointer }
 .layer-row.selected{ background:var(--black); color:var(--white) }
 .layer-row button{ margin-left:4px }
+
+/* Auth */
+.auth{ display:flex; align-items:center; justify-content:center; min-height:100vh }
+.auth form{ display:flex; flex-direction:column; gap:12px; border:2px solid var(--black); background:var(--white); padding:20px; box-shadow:4px 4px 0 var(--black) }
 
 /* Free canvas */
 .free-canvas{ position:relative; width:100%; height:400px; border:2px dashed var(--black); background:var(--white) }
