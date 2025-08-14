@@ -782,15 +782,21 @@ const CSS = `
 .film-caption{ font-size:12px; text-align:center; margin-top:6px }
 
 /* Board layout */
-.board{ position:relative; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:160px 160px 140px; gap:10px }
+.board{ position:relative; width:100%; height:500px }
 .board-static .dropzone{ pointer-events:none }
-.board-area.outerwear{ grid-column:1/2; grid-row:1/2 }
-.board-area.top{ grid-column:2/3; grid-row:1/2 }
-.board-area.bottom{ grid-column:2/3; grid-row:2/3 }
-.board-area.shoes{ grid-column:1/2; grid-row:3/4 }
-.board-area.accessories{ grid-column:2/3; grid-row:3/4 }
+.board-area{ position:absolute }
 
-.dropzone{ position:relative; border:2px dashed var(--black); padding:6px; display:grid; place-items:center; transition:transform .08s, border-color .12s; background:var(--white) }
+/* Layered positions */
+.board-area.outerwear{ top:20px; left:20px; width:45%; height:60%; z-index:1 }
+.board-area.bottom{ top:180px; left:30%; width:45%; height:55%; z-index:2 }
+.board-area.top{ top:60px; left:35%; width:45%; height:55%; z-index:3 }
+.board-area.shoes{ bottom:20px; left:25%; width:50%; height:20%; z-index:4 }
+.board-area.accessories{ top:20px; right:20px; width:20%; height:20%; z-index:4 }
+
+/* Ensure images never overflow */
+.dropzone, .zone-item img{ width:100%; height:100%; object-fit:contain }
+
+.dropzone{ position:relative; border:2px dashed var(--black); padding:6px; display:grid; place-items:center; transition:transform .08s, border-color .12s; background:var(--white); box-sizing:border-box }
 .dropzone.filled{ border-style:solid }
 .dz-label{ position:absolute; top:-10px; left:8px; background:var(--white); padding:0 6px; font-size:12px; letter-spacing:1px }
 .dz-clear{ position:absolute; top:4px; right:4px; border:2px solid var(--black); background:var(--white); cursor:pointer; padding:2px }
