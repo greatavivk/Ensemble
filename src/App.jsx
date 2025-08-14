@@ -179,6 +179,14 @@ function moveLayer(id, dir) {
     return { ...prev, items: sorted.map((it, i) => ({ ...it, z: i + 1 })) }
   })
 }
+
+function removeOutfitItem(id) {
+  setOutfit(prev => {
+    const remaining = prev.items.filter(o => o.id !== id).sort((a, b) => a.z - b.z)
+    return { ...prev, items: remaining.map((it, i) => ({ ...it, z: i + 1 })) }
+  })
+  setSelectedItemId(sid => (sid === id ? null : sid))
+}
 function snapOk(el) { el.classList.remove('anim-snap'); void el.offsetWidth; el.classList.add('anim-snap') }
 
 // filters
@@ -283,9 +291,10 @@ function saveCurrentOutfit() {
   if (!outfit.items.length) return
   const rect = canvasRef.current?.getBoundingClientRect() || { width: 0, height: 0 }
   const id = `o${Date.now()}`
+  const ordered = [...outfit.items].sort((a, b) => a.z - b.z)
   setSavedLooks(prev => [
     ...prev,
-    { id, name: 'Saved Look', items: structuredClone(outfit.items), w: rect.width, h: rect.height }
+    { id, name: 'Saved Look', items: structuredClone(ordered), w: rect.width, h: rect.height }
   ])
 }
 function deleteLook(id) { setSavedLooks(prev => prev.filter(l => l.id !== id)) }
@@ -346,6 +355,7 @@ onDeleteItem={deleteItem}
         handleCanvasDrop={handleCanvasDrop}
         updateOutfitItem={updateOutfitItem}
         moveLayer={moveLayer}
+        removeOutfitItem={removeOutfitItem}
         onSaveOutfit={saveCurrentOutfit}
         canvasRef={canvasRef}
       />
@@ -599,7 +609,7 @@ function DraggableResizable({ data, onUpdate, onSelect, children }) {
   )
 }
 
-function Builder({ items, outfit, selectedItemId, setSelectedItemId, onDragOver, onDragStart, handleCanvasDrop, updateOutfitItem, moveLayer, onSaveOutfit, canvasRef }) {
+function Builder({ items, outfit, selectedItemId, setSelectedItemId, onDragOver, onDragStart, handleCanvasDrop, updateOutfitItem, moveLayer, removeOutfitItem, onSaveOutfit, canvasRef }) {
   const getItem = id => items.find(i => i.id === id)
   const selectedItem = outfit.items.find(i => i.id === selectedItemId)
   const itemsSortedByZ = [...outfit.items].sort((a, b) => b.z - a.z)
@@ -653,6 +663,7 @@ function Builder({ items, outfit, selectedItemId, setSelectedItemId, onDragOver,
               value={selectedItem.scale}
               onChange={e => updateOutfitItem(selectedItem.id, { scale: parseFloat(e.target.value) })}
             />
+            <button className="btn danger" onClick={() => removeOutfitItem(selectedItem.id)}>Delete Item</button>
           </div>
         )}
         <div className="layer-panel">
@@ -666,8 +677,9 @@ function Builder({ items, outfit, selectedItemId, setSelectedItemId, onDragOver,
               >
                 <span>{meta?.name || it.id}</span>
                 <span>
-                  <button onClick={e => { e.stopPropagation(); moveLayer(it.id, -1) }}>↑</button>
-                  <button onClick={e => { e.stopPropagation(); moveLayer(it.id, 1) }}>↓</button>
+                  <button onClick={e => { e.stopPropagation(); moveLayer(it.id, 1) }}>↑</button>
+                  <button onClick={e => { e.stopPropagation(); moveLayer(it.id, -1) }}>↓</button>
+                  <button onClick={e => { e.stopPropagation(); removeOutfitItem(it.id) }}><X size={12} /></button>
                 </span>
               </div>
             )
@@ -839,8 +851,8 @@ const CSS = `
 .preview-title{ font-weight:700 }
 .preview-actions{ padding:8px }
 
-.masonry{ column-count:3; column-gap:12px }
-.masonry-card{ break-inside:avoid; border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); margin-bottom:12px }
+.masonry{ display:grid; grid-template-columns:repeat(2,1fr); gap:12px }
+.masonry-card{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black) }
 
 .no-frame-img{ max-width:100%; max-height:100%; object-fit:contain; display:block; background:transparent }
 .no-frame-img.small{ max-height:40px }
