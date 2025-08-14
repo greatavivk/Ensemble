@@ -141,6 +141,7 @@ useEffect(() => setLearned(getLearnedColors()), [])
 
 // drag data
 const dragDataRef = useRef(null)
+const canvasRef = useRef(null)
 function onDragStart(e, item) {
 if (!item || item.category === 'uncategorized') return // block dragging until categorized
 dragDataRef.current = item
@@ -161,7 +162,7 @@ function handleCanvasDrop(e) {
   }));
   snapOk(e.currentTarget);
 }
-function updateItem(id, changes) {
+function updateOutfitItem(id, changes) {
   setOutfit(prev => ({
     ...prev,
     items: prev.items.map(o => (o.id === id ? { ...o, ...changes } : o))
@@ -238,7 +239,7 @@ e.target.value = ''
 }
 
 // save / delete items
-async function updateItem(updated) {
+async function updateClosetItem(updated) {
 // learn colors user typed (new unique values)
 const newColors = (updated.colorTags || []).filter(c => !!c && !getLearnedColors().includes(c.toLowerCase()))
 if (newColors.length) { const next = Array.from(new Set([...getLearnedColors(), ...newColors.map(c => c.toLowerCase())])); setLearnedColors(next); setLearned(next) }
@@ -280,8 +281,12 @@ await supabase.from('items').delete().eq('id', id)
 // looks
 function saveCurrentOutfit() {
   if (!outfit.items.length) return
+  const rect = canvasRef.current?.getBoundingClientRect() || { width: 0, height: 0 }
   const id = `o${Date.now()}`
-  setSavedLooks(prev => [...prev, { id, name: 'Saved Look', items: structuredClone(outfit.items) }])
+  setSavedLooks(prev => [
+    ...prev,
+    { id, name: 'Saved Look', items: structuredClone(outfit.items), w: rect.width, h: rect.height }
+  ])
 }
 function deleteLook(id) { setSavedLooks(prev => prev.filter(l => l.id !== id)) }
 
@@ -325,24 +330,25 @@ onSeasonsFilter={setActiveSeasonsFilter}
 onUploadClick={onUploadClick}
 fileInputRef={fileInputRef}
 onFileChange={onFileChange}
-onUpdateItem={updateItem}
+onUpdateItem={updateClosetItem}
 onDeleteItem={deleteItem}
 />
 )}
 
 {tab === 'builder' && (
 <Builder
-items={items}
-outfit={outfit}
-selectedItemId={selectedItemId}
-setSelectedItemId={setSelectedItemId}
-onDragOver={onDragOver}
-onDragStart={onDragStart}
-handleCanvasDrop={handleCanvasDrop}
-updateItem={updateItem}
-moveLayer={moveLayer}
-onSaveOutfit={saveCurrentOutfit}
-/>
+        items={items}
+        outfit={outfit}
+        selectedItemId={selectedItemId}
+        setSelectedItemId={setSelectedItemId}
+        onDragOver={onDragOver}
+        onDragStart={onDragStart}
+        handleCanvasDrop={handleCanvasDrop}
+        updateOutfitItem={updateOutfitItem}
+        moveLayer={moveLayer}
+        onSaveOutfit={saveCurrentOutfit}
+        canvasRef={canvasRef}
+      />
 )}
 
 {tab === 'gallery' && (
@@ -361,12 +367,13 @@ return (
 }
 
 function Dashboard({ items, heroWord, goToCloset }) {
-const [bgUrl, setBgUrl] = useState(() => { try { return localStorage.getItem('ensemble.heroUrl') || '' } catch { return '' } })
+const DEFAULT_BG = 'https://i.pinimg.com/1200x/f9/74/0b/f9740b79ef42a33a3ccba2b913654573.jpg'
+const [bgUrl, setBgUrl] = useState(() => { try { return localStorage.getItem('ensemble.heroUrl') || DEFAULT_BG } catch { return DEFAULT_BG } })
 function setHeroFromPrompt() {
 const u = window.prompt('Paste a direct image URL (.jpg/.png works best):', bgUrl)
 if (u != null) { setBgUrl(u); try { localStorage.setItem('ensemble.heroUrl', u) } catch { } }
 }
-const heroStyle = bgUrl ? { backgroundImage: `url(${bgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}
+const heroStyle = bgUrl ? { backgroundImage: `url(${bgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center', filter: 'brightness(0.6)' } : {}
 const recent = (items || []).slice(0, 6)
 return (
 <section className="section">
@@ -596,7 +603,7 @@ function DraggableResizable({ data, onUpdate, onSelect, children }) {
   )
 }
 
-function Builder({ items, outfit, selectedItemId, setSelectedItemId, onDragOver, onDragStart, handleCanvasDrop, updateItem, moveLayer, onSaveOutfit }) {
+function Builder({ items, outfit, selectedItemId, setSelectedItemId, onDragOver, onDragStart, handleCanvasDrop, updateOutfitItem, moveLayer, onSaveOutfit, canvasRef }) {
   const getItem = id => items.find(i => i.id === id)
   const selectedItem = outfit.items.find(i => i.id === selectedItemId)
   const itemsSortedByZ = [...outfit.items].sort((a, b) => b.z - a.z)
@@ -618,14 +625,14 @@ function Builder({ items, outfit, selectedItemId, setSelectedItemId, onDragOver,
       </div>
 
       <div className="builder-center">
-        <div className="free-canvas" onDragOver={onDragOver} onDrop={handleCanvasDrop}>
+        <div ref={canvasRef} className="free-canvas" onDragOver={onDragOver} onDrop={handleCanvasDrop}>
           {outfit.items.map(o => {
             const it = getItem(o.id)
             return (
               <DraggableResizable
                 key={o.id}
                 data={o}
-                onUpdate={changes => updateItem(o.id, changes)}
+                onUpdate={changes => updateOutfitItem(o.id, changes)}
                 onSelect={() => setSelectedItemId(o.id)}
               >
                 {it?.imageUrl ? (
@@ -648,7 +655,7 @@ function Builder({ items, outfit, selectedItemId, setSelectedItemId, onDragOver,
               max="2"
               step="0.05"
               value={selectedItem.scale}
-              onChange={e => updateItem(selectedItem.id, { scale: parseFloat(e.target.value) })}
+              onChange={e => updateOutfitItem(selectedItem.id, { scale: parseFloat(e.target.value) })}
             />
           </div>
         )}
@@ -691,7 +698,7 @@ function Gallery({ items, savedLooks, onDeleteLook }) {
           <div key={look.id} className="masonry-card">
             <div className="polaroid">
               <div className="polaroid-frame no-frame">
-                <div className="free-canvas static">
+                <div className="free-canvas static" style={{ width: look.w, height: look.h }}>
                   {look.items.map(o => {
                     const it = getItem(o.id)
                     const style = { position: 'absolute', left: o.x, top: o.y, width: 100 * o.scale, height: 100 * o.scale, zIndex: o.z }
@@ -739,7 +746,7 @@ const CSS = `
 
 .hero{ position:relative; color:var(--white); padding:28px; box-shadow:4px 4px 0 var(--black) inset; background:var(--black); min-height:220px; display:flex; flex-direction:column; justify-content:center }
 .hero.with-bg{ background-color:#000; background-blend-mode:normal }
-.hero-overlay{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,.55), rgba(0,0,0,.35)); pointer-events:none }
+.hero-overlay{ position:absolute; inset:0; background:rgba(0,0,0,.5); pointer-events:none }
 .hero-title{ font-size:32px; display:flex; flex-direction:column; gap:6px; z-index:1 }
 .hero-be{ font-weight:700; letter-spacing:4px }
 .hero-word{ font-style:italic; line-height:1 }
