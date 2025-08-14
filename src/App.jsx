@@ -133,6 +133,7 @@ const [activeCategory, setActiveCategory] = useState('all')
 const [activeSeasonsFilter, setActiveSeasonsFilter] = useState([])
 const [outfit, setOutfit] = useState(EMPTY_OUTFIT)
 const [savedLooks, setSavedLooks] = useState([])
+const [selectedItemId, setSelectedItemId] = useState(null)
 
 // learned colors cache (for suggestions)
 const [learned, setLearned] = useState(getLearnedColors())
@@ -160,11 +161,22 @@ function handleCanvasDrop(e) {
   }));
   snapOk(e.currentTarget);
 }
-function updateItemPosition(id, changes) {
+function updateItem(id, changes) {
   setOutfit(prev => ({
     ...prev,
     items: prev.items.map(o => (o.id === id ? { ...o, ...changes } : o))
-  }));
+  }))
+}
+
+function moveLayer(id, dir) {
+  setOutfit(prev => {
+    const sorted = [...prev.items].sort((a, b) => a.z - b.z)
+    const idx = sorted.findIndex(i => i.id === id)
+    const swapIdx = idx + dir
+    if (idx === -1 || swapIdx < 0 || swapIdx >= sorted.length) return prev
+    ;[sorted[idx].z, sorted[swapIdx].z] = [sorted[swapIdx].z, sorted[idx].z]
+    return { ...prev, items: sorted.map((it, i) => ({ ...it, z: i + 1 })) }
+  })
 }
 function snapOk(el) { el.classList.remove('anim-snap'); void el.offsetWidth; el.classList.add('anim-snap') }
 
@@ -322,10 +334,13 @@ onDeleteItem={deleteItem}
 <Builder
 items={items}
 outfit={outfit}
+selectedItemId={selectedItemId}
+setSelectedItemId={setSelectedItemId}
 onDragOver={onDragOver}
 onDragStart={onDragStart}
 handleCanvasDrop={handleCanvasDrop}
-updateItemPosition={updateItemPosition}
+updateItem={updateItem}
+moveLayer={moveLayer}
 onSaveOutfit={saveCurrentOutfit}
 />
 )}
@@ -559,28 +574,32 @@ return (
 )
 }
 
-function DraggableResizable({ data, onUpdate, children }) {
+function DraggableResizable({ data, onUpdate, onSelect, children }) {
   return (
     <Rnd
       size={{ width: 100 * data.scale, height: 100 * data.scale }}
       position={{ x: data.x, y: data.y }}
       onDragStop={(e, d) => onUpdate({ x: d.x, y: d.y })}
-      onResizeStop={(e, dir, ref, delta, pos) => {
-        onUpdate({
-          scale: ref.offsetWidth / 100,
-          x: pos.x,
-          y: pos.y
-        })
-      }}
-      style={{ zIndex: data.z, position: 'absolute' }}
+      dragHandleClassName="drag-handle"
+      dragGrid={[1, 1]}
+      bounds=".free-canvas"
+      enableResizing={false}
+      style={{ cursor: 'grab', zIndex: data.z, userSelect: 'none', position: 'absolute' }}
+      onMouseDown={onSelect}
     >
-      {children}
+      <div className="drag-handle" style={{ width: '100%', height: '100%' }}>
+        <div style={{ width: '100%', height: '100%', pointerEvents: 'none' }}>
+          {children}
+        </div>
+      </div>
     </Rnd>
   )
 }
 
-function Builder({ items, outfit, onDragOver, onDragStart, handleCanvasDrop, updateItemPosition, onSaveOutfit }) {
+function Builder({ items, outfit, selectedItemId, setSelectedItemId, onDragOver, onDragStart, handleCanvasDrop, updateItem, moveLayer, onSaveOutfit }) {
   const getItem = id => items.find(i => i.id === id)
+  const selectedItem = outfit.items.find(i => i.id === selectedItemId)
+  const itemsSortedByZ = [...outfit.items].sort((a, b) => b.z - a.z)
   return (
     <section className="section builder">
       <div className="builder-left">
@@ -603,8 +622,17 @@ function Builder({ items, outfit, onDragOver, onDragStart, handleCanvasDrop, upd
           {outfit.items.map(o => {
             const it = getItem(o.id)
             return (
-              <DraggableResizable key={o.id} data={o} onUpdate={changes => updateItemPosition(o.id, changes)}>
-                {it?.imageUrl ? <img src={it.imageUrl} alt={it.name} /> : iconByKey(it.icon, { size: 36 })}
+              <DraggableResizable
+                key={o.id}
+                data={o}
+                onUpdate={changes => updateItem(o.id, changes)}
+                onSelect={() => setSelectedItemId(o.id)}
+              >
+                {it?.imageUrl ? (
+                  <img src={it.imageUrl} alt={it.name} draggable={false} />
+                ) : (
+                  iconByKey(it.icon, { size: 36 })
+                )}
               </DraggableResizable>
             )
           })}
@@ -612,6 +640,36 @@ function Builder({ items, outfit, onDragOver, onDragStart, handleCanvasDrop, upd
       </div>
 
       <div className="builder-right">
+        {selectedItem && (
+          <div className="size-control">
+            <input
+              type="range"
+              min="0.5"
+              max="2"
+              step="0.05"
+              value={selectedItem.scale}
+              onChange={e => updateItem(selectedItem.id, { scale: parseFloat(e.target.value) })}
+            />
+          </div>
+        )}
+        <div className="layer-panel">
+          {itemsSortedByZ.map(it => {
+            const meta = getItem(it.id)
+            return (
+              <div
+                key={it.id}
+                className={`layer-row ${selectedItemId === it.id ? 'selected' : ''}`}
+                onClick={() => setSelectedItemId(it.id)}
+              >
+                <span>{meta?.name || it.id}</span>
+                <span>
+                  <button onClick={e => { e.stopPropagation(); moveLayer(it.id, -1) }}>↑</button>
+                  <button onClick={e => { e.stopPropagation(); moveLayer(it.id, 1) }}>↓</button>
+                </span>
+              </div>
+            )
+          })}
+        </div>
         <div className="preview">
           <div className="preview-header"><div className="preview-title">Current Look</div></div>
           <div className="preview-actions"><button className="btn" onClick={onSaveOutfit}>Save Look</button></div>
@@ -755,11 +813,16 @@ const CSS = `
 .film-cell.dim{ opacity:.5 }
 .film-frame{ border:2px solid var(--black); height:60px; display:grid; place-items:center; box-shadow:4px 4px 0 var(--black) }
 .film-caption{ font-size:12px; text-align:center; margin-top:6px }
+.size-control{ margin-bottom:12px }
+.layer-panel{ border:2px solid var(--black); background:var(--white); margin-bottom:12px }
+.layer-row{ display:flex; justify-content:space-between; align-items:center; padding:4px 8px; cursor:pointer }
+.layer-row.selected{ background:var(--black); color:var(--white) }
+.layer-row button{ margin-left:4px }
 
 /* Free canvas */
 .free-canvas{ position:relative; width:100%; height:400px; border:2px dashed var(--black); background:var(--white) }
 .free-canvas.static{ pointer-events:none }
-.free-canvas img{ width:100%; height:100%; object-fit:contain }
+.free-canvas img{ width:100%; height:100%; object-fit:contain; pointer-events:none }
 
 @keyframes snap{ 0%{transform:scale(.98)} 100%{transform:scale(1)} }
 @keyframes bounce{ 0%{transform:translateY(0)} 30%{transform:translateY(-6px)} 60%{transform:translateY(0)} 100%{transform:translateY(0)} }
