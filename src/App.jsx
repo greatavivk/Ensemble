@@ -370,7 +370,7 @@ useEffect(() => { const t = setInterval(() => setWordIdx(i => (i + 1) % WORDS.le
 if (!user) return (
   <div style={styles.app}>
     <style>{CSS}</style>
-    <Auth />
+    <Auth onAuth={setUser} />
   </div>
 )
 
@@ -453,18 +453,34 @@ onDeleteItem={deleteItem}
 }
 
 // ----------------------- Components -------------------------
-function Auth() {
+function Auth({ onAuth }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [mode, setMode] = useState('signin')
+
   async function submit(e) {
     e.preventDefault()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) alert(error.message)
+    if (mode === 'signup') {
+      const { data, error } = await supabase.auth.signUp({ email, password })
+      if (error) return alert(error.message)
+      if (!data.session) {
+        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password })
+        if (signInErr) return alert(signInErr.message)
+        onAuth?.(signInData.user)
+      } else {
+        onAuth?.(data.user)
+      }
+    } else {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) return alert(error.message)
+      onAuth?.(data.user)
+    }
   }
+
   return (
     <div className="auth">
       <form onSubmit={submit}>
-        <h2 className="form-title">Sign In</h2>
+        <h2 className="form-title">{mode === 'signin' ? 'Sign In' : 'Create Account'}</h2>
         <input className="input" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" />
         <input
           className="input"
@@ -473,7 +489,14 @@ function Auth() {
           onChange={e => setPassword(e.target.value)}
           placeholder="Password"
         />
-        <button className="btn" type="submit">Enter</button>
+        <button className="btn" type="submit">{mode === 'signin' ? 'Enter' : 'Register'}</button>
+        <button
+          type="button"
+          className="toggle"
+          onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
+        >
+          {mode === 'signin' ? 'Need an account? Sign Up' : 'Have an account? Sign In'}
+        </button>
       </form>
     </div>
   )
@@ -1029,6 +1052,7 @@ const CSS = `
 /* Auth */
 .auth{ display:flex; align-items:center; justify-content:center; min-height:100vh }
 .auth form{ display:flex; flex-direction:column; gap:12px; border:2px solid var(--black); background:var(--white); padding:20px; box-shadow:4px 4px 0 var(--black) }
+.auth .toggle{ background:none; border:none; color:var(--black); text-decoration:underline; cursor:pointer; padding:0; font-family:${FONT_STACK} }
 
 /* Free canvas */
 .free-canvas{ position:relative; width:100%; height:400px; border:2px dashed var(--black); background:var(--white) }
