@@ -3,13 +3,14 @@
 // ✅ Closet: single Upload button; new items are `uncategorized`
 // ✅ Item Editor: Category select + free‑form Color/Occasion chips; Seasons checkboxes
 // ✅ Color tags: user types + Enter → chips; auto‑detect from Name ONLY when tags are empty; learns new colors
-// ✅ Builder + Saved Looks: fixed board layout (Outerwear, Top, Bottom, Shoes, Accessories)
+// ✅ Builder + Saved Looks: freeform canvas builder
 // ✅ Drag & Drop: disabled until category set (not `uncategorized`); accessories capped at 3
 // ✅ Delete Items + Delete Looks (best‑effort storage delete when Supabase on)
 // ✅ Dashboard: smoother BE/word animation + optional hero image with overlay
 // ✅ lucide-react: valid icons only; custom Jacket/Trousers SVGs
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { Rnd } from 'react-rnd'
 import {
 Footprints,
 GraduationCap,
@@ -23,22 +24,12 @@ Filter,
 Star,
 Trash2,
 } from 'lucide-react'
+import { createClient } from '@supabase/supabase-js'
 
-// ----------------------- Supabase Toggle ---------------------
-const USE_SUPABASE = false // set true when env vars are configured in Vercel
-let supabase = null
-if (USE_SUPABASE) {
-try {
-// lazy import to avoid bundling errors if not used
-// eslint-disable-next-line no-new-func
-const createClient = (await import('@supabase/supabase-js')).createClient
-const URL = import.meta?.env?.VITE_SUPABASE_URL
-const KEY = import.meta?.env?.VITE_SUPABASE_ANON_KEY
-if (URL && KEY) supabase = createClient(URL, KEY)
-} catch (e) {
-console.warn('Supabase not initialized:', e)
-}
-}
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+)
 
 // ----------------------- Design Tokens ----------------------
 const COLORS = {
@@ -122,23 +113,61 @@ return Array.from(new Set(found))
 }
 
 // ----------------------- Outfit Model -----------------------
-const EMPTY_OUTFIT = { id: 'o1', name: 'Untitled Look', items: { outerwear: null, hat: null, top: null, bottom: null, shoes: null, accessories: [] } }
+const EMPTY_OUTFIT = { id: 'o1', name: 'Untitled Look', seasons: [], items: [] }
 
 // ----------------------- App --------------------------------
 export default function App() {
 const [tab, setTab] = useState('dashboard')
-const [items, setItems] = useState([]) // start empty (no demo)
+const [user, setUser] = useState(null)
+const [items, setItems] = useState([])
 const [activeCategory, setActiveCategory] = useState('all')
 const [activeSeasonsFilter, setActiveSeasonsFilter] = useState([])
 const [outfit, setOutfit] = useState(EMPTY_OUTFIT)
 const [savedLooks, setSavedLooks] = useState([])
+const [selectedItemId, setSelectedItemId] = useState(null)
 
 // learned colors cache (for suggestions)
 const [learned, setLearned] = useState(getLearnedColors())
 useEffect(() => setLearned(getLearnedColors()), [])
 
+// auth state + initial load
+useEffect(() => {
+  const init = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    setUser(session?.user ?? null)
+  }
+  init()
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((_evt, session) => {
+    setUser(session?.user ?? null)
+  })
+  return () => subscription.unsubscribe()
+}, [])
+
+// load items + looks when user logs in
+useEffect(() => {
+  if (!user) return
+  const loadData = async () => {
+    const { data: itemRows } = await supabase
+      .from('items')
+      .select('*')
+      .eq('user_id', user.id)
+    setItems(itemRows || [])
+    const { data: lookRows } = await supabase
+      .from('looks')
+      .select('*')
+      .eq('user_id', user.id)
+    setSavedLooks(lookRows || [])
+  }
+  loadData()
+}, [user])
+
 // drag data
 const dragDataRef = useRef(null)
+const canvasRef = useRef(null)
 function onDragStart(e, item) {
 if (!item || item.category === 'uncategorized') return // block dragging until categorized
 dragDataRef.current = item
@@ -146,27 +175,44 @@ e.dataTransfer.setData('text/plain', item.id)
 e.dataTransfer.effectAllowed = 'move'
 }
 function onDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }
-function onDrop(e, zone) {
-e.preventDefault(); const item = dragDataRef.current; if (!item) return
-const map = { outerwear: 'outerwear', hat: 'hats', top: 'tops', bottom: 'bottoms', shoes: 'shoes', accessories: 'accessories' }
-const valid = map[zone] === item.category || (zone === 'accessories' && item.category === 'accessories')
-if (!valid) return bounceInvalid(e.currentTarget)
-setOutfit(prev => {
-const next = structuredClone(prev)
-switch (zone) {
-case 'outerwear': next.items.outerwear = item.id; break
-case 'hat': next.items.hat = item.id; break
-case 'top': next.items.top = item.id; break
-case 'bottom': next.items.bottom = item.id; break
-case 'shoes': next.items.shoes = item.id; break
-case 'accessories': next.items.accessories = [...new Set([item.id, ...next.items.accessories])].slice(0, 3); break
-default: break
+function handleCanvasDrop(e) {
+  e.preventDefault();
+  const item = dragDataRef.current;
+  if (!item) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  setOutfit(prev => ({
+    ...prev,
+    items: [...prev.items, { id: item.id, x, y, scale: 1, z: prev.items.length + 1 }]
+  }));
+  snapOk(e.currentTarget);
 }
-return next
-})
-snapOk(e.currentTarget)
+function updateOutfitItem(id, changes) {
+  setOutfit(prev => ({
+    ...prev,
+    items: prev.items.map(o => (o.id === id ? { ...o, ...changes } : o))
+  }))
 }
-function bounceInvalid(el) { el.classList.remove('anim-bounce'); void el.offsetWidth; el.classList.add('anim-bounce') }
+
+function moveLayer(id, dir) {
+  setOutfit(prev => {
+    const sorted = [...prev.items].sort((a, b) => a.z - b.z)
+    const idx = sorted.findIndex(i => i.id === id)
+    const swapIdx = idx + dir
+    if (idx === -1 || swapIdx < 0 || swapIdx >= sorted.length) return prev
+    ;[sorted[idx].z, sorted[swapIdx].z] = [sorted[swapIdx].z, sorted[idx].z]
+    return { ...prev, items: sorted.map((it, i) => ({ ...it, z: i + 1 })) }
+  })
+}
+
+function removeOutfitItem(id) {
+  setOutfit(prev => {
+    const remaining = prev.items.filter(o => o.id !== id).sort((a, b) => a.z - b.z)
+    return { ...prev, items: remaining.map((it, i) => ({ ...it, z: i + 1 })) }
+  })
+  setSelectedItemId(sid => (sid === id ? null : sid))
+}
 function snapOk(el) { el.classList.remove('anim-snap'); void el.offsetWidth; el.classList.add('anim-snap') }
 
 // filters
@@ -181,103 +227,152 @@ return list
 const fileInputRef = useRef(null)
 function onUploadClick() { fileInputRef.current?.click() }
 async function onFileChange(e) {
-const file = e.target.files?.[0]; if (!file) return
-const id = `i${Date.now()}`
-// default icon by guessed type? we keep shirt by default; user can change category later
-const newItem = {
-id,
-name: 'Unnamed fashion piece',
-category: 'uncategorized',
-seasons: [],
-colorTags: [],
-occasions: [],
-description: '',
-usageCount: 0,
-dateAdded: new Date().toISOString().slice(0, 10),
-icon: 'shirt',
-}
-if (USE_SUPABASE && supabase) {
-try {
-const path = `anon/${id}-${Date.now()}`
-const { error: upErr } = await supabase.storage.from('items').upload(path, file, { upsert: true })
-if (upErr) throw upErr
-const { data: urlData } = supabase.storage.from('items').getPublicUrl(path)
-setItems(prev => [{ ...newItem, imageUrl: urlData.publicUrl, imagePath: path }, ...prev])
-await supabase.from('items').insert({
-id,
-name: newItem.name,
-category: newItem.category,
-seasons: newItem.seasons,
-color_tags: newItem.colorTags,
-occasions: newItem.occasions,
-description: newItem.description,
-usage_count: newItem.usageCount,
-image_url: urlData.publicUrl,
-image_path: path,
-})
-} catch (err) {
-console.error('Upload failed', err)
-// fallback to client-only preview
-const reader = new FileReader(); reader.onload = () => setItems(prev => [{ ...newItem, imageUrl: reader.result }, ...prev]); reader.readAsDataURL(file)
-}
-} else {
-const reader = new FileReader(); reader.onload = () => setItems(prev => [{ ...newItem, imageUrl: reader.result }, ...prev]); reader.readAsDataURL(file)
-}
-e.target.value = ''
+  const file = e.target.files?.[0]
+  if (!file || !user) return
+  const id = `i${Date.now()}`
+  const newItem = {
+    id,
+    name: 'Unnamed fashion piece',
+    category: 'uncategorized',
+    seasons: [],
+    colorTags: [],
+    occasions: [],
+    description: '',
+    usageCount: 0,
+    dateAdded: new Date().toISOString().slice(0, 10),
+    icon: 'shirt',
+  }
+  try {
+    const path = `${user.id}/${id}-${Date.now()}`
+    const { error: upErr } = await supabase.storage.from('items').upload(path, file, { upsert: true })
+    if (upErr) throw upErr
+    const { data: urlData } = supabase.storage.from('items').getPublicUrl(path)
+    const insertData = {
+      id,
+      user_id: user.id,
+      name: newItem.name,
+      category: newItem.category,
+      seasons: newItem.seasons,
+      color_tags: newItem.colorTags,
+      occasions: newItem.occasions,
+      description: newItem.description,
+      usage_count: newItem.usageCount,
+      image_url: urlData.publicUrl,
+      image_path: path,
+    }
+    const { data: row } = await supabase.from('items').insert(insertData).select().single()
+    setItems(prev => [row, ...prev])
+  } catch (err) {
+    console.error('Upload failed', err)
+    const reader = new FileReader()
+    reader.onload = () => setItems(prev => [{ ...newItem, imageUrl: reader.result }, ...prev])
+    reader.readAsDataURL(file)
+  }
+  e.target.value = ''
 }
 
 // save / delete items
-async function updateItem(updated) {
+async function updateClosetItem(updated) {
 // learn colors user typed (new unique values)
 const newColors = (updated.colorTags || []).filter(c => !!c && !getLearnedColors().includes(c.toLowerCase()))
 if (newColors.length) { const next = Array.from(new Set([...getLearnedColors(), ...newColors.map(c => c.toLowerCase())])); setLearnedColors(next); setLearned(next) }
 
 setItems(prev => prev.map(i => i.id === updated.id ? {
-...i,
-name: updated.name,
-category: updated.category,
-seasons: updated.seasons,
-colorTags: updated.colorTags,
-occasions: updated.occasions,
-description: updated.description || '',
+  ...i,
+  name: updated.name,
+  category: updated.category,
+  seasons: updated.seasons,
+  colorTags: updated.colorTags,
+  occasions: updated.occasions,
+  description: updated.description || '',
 } : i))
 
-if (USE_SUPABASE && supabase) {
+if (!user) return
 try {
-await supabase.from('items').update({
-name: updated.name,
-category: updated.category,
-seasons: updated.seasons,
-color_tags: updated.colorTags,
-occasions: updated.occasions,
-description: updated.description || '',
-}).eq('id', updated.id)
-} catch (e) { console.warn('SB update failed', e) }
+  await supabase
+    .from('items')
+    .update({
+      name: updated.name,
+      category: updated.category,
+      seasons: updated.seasons,
+      color_tags: updated.colorTags,
+      occasions: updated.occasions,
+      description: updated.description || '',
+    })
+    .eq('id', updated.id)
+    .eq('user_id', user.id)
+} catch (e) {
+  console.warn('SB update failed', e)
 }
 }
 async function deleteItem(id) {
 const item = items.find(i => i.id === id)
 setItems(prev => prev.filter(i => i.id !== id))
-if (USE_SUPABASE && supabase) {
+if (!user) return
 try {
-if (item?.imagePath) await supabase.storage.from('items').remove([item.imagePath])
-await supabase.from('items').delete().eq('id', id)
-} catch (e) { console.warn('SB delete failed', e) }
+  if (item?.imagePath) await supabase.storage.from('items').remove([item.imagePath])
+  await supabase.from('items').delete().eq('id', id).eq('user_id', user.id)
+} catch (e) {
+  console.warn('SB delete failed', e)
 }
 }
 
 // looks
-function saveCurrentOutfit() {
-const hasAny = outfit.items.outerwear || outfit.items.hat || outfit.items.top || outfit.items.bottom || outfit.items.shoes || outfit.items.accessories.length
-if (!hasAny) return
-const id = `o${Date.now()}`
-setSavedLooks(prev => [...prev, { id, name: 'Saved Look', items: structuredClone(outfit.items) }])
+async function saveCurrentOutfit() {
+  if (!outfit.items.length || !user) return
+  const rect = canvasRef.current?.getBoundingClientRect() || { width: 0, height: 0 }
+  const id = `o${Date.now()}`
+  const ordered = [...outfit.items]
+    .sort((a, b) => a.z - b.z)
+    .map(o => {
+      const it = items.find(i => i.id === o.id)
+      return { ...o, imageUrl: it?.imageUrl, icon: it?.icon, name: it?.name }
+    })
+  const payload = {
+    id,
+    user_id: user.id,
+    name: outfit.name || 'Saved Look',
+    seasons: outfit.seasons || [],
+    items: ordered,
+    w: rect.width,
+    h: rect.height,
+  }
+  try {
+    const { data: row } = await supabase.from('looks').insert(payload).select().single()
+    setSavedLooks(prev => [...prev, row])
+  } catch (e) {
+    console.warn('SB save look failed', e)
+    setSavedLooks(prev => [...prev, payload])
+  }
 }
-function deleteLook(id) { setSavedLooks(prev => prev.filter(l => l.id !== id)) }
+async function deleteLook(id) {
+  setSavedLooks(prev => prev.filter(l => l.id !== id))
+  if (!user) return
+  try {
+    await supabase.from('looks').delete().eq('id', id).eq('user_id', user.id)
+  } catch (e) {
+    console.warn('SB delete look failed', e)
+  }
+}
+async function updateSavedLook(id, changes) {
+  setSavedLooks(prev => prev.map(l => (l.id === id ? { ...l, ...changes } : l)))
+  if (!user) return
+  try {
+    await supabase.from('looks').update(changes).eq('id', id).eq('user_id', user.id)
+  } catch (e) {
+    console.warn('SB update look failed', e)
+  }
+}
 
 // word rotation for dashboard
 const [wordIdx, setWordIdx] = useState(0)
 useEffect(() => { const t = setInterval(() => setWordIdx(i => (i + 1) % WORDS.length), 1600); return () => clearInterval(t) }, [])
+if (!user) return (
+  <div style={styles.app}>
+    <style>{CSS}</style>
+    <Auth onAuth={setUser} />
+  </div>
+)
 
 return (
 <div style={styles.app}>
@@ -291,6 +386,16 @@ return (
 <NavBtn label="Digital Closet" active={tab === 'closet'} onClick={() => setTab('closet')} />
 <NavBtn label="Outfit Builder" active={tab === 'builder'} onClick={() => setTab('builder')} />
 <NavBtn label="Saved Looks" active={tab === 'gallery'} onClick={() => setTab('gallery')} />
+<NavBtn
+  label="Sign Out"
+  active={false}
+  onClick={async () => {
+    await supabase.auth.signOut()
+    setTab('dashboard')
+    setItems([])
+    setSavedLooks([])
+  }}
+/>
 </nav>
 </header>
 
@@ -299,6 +404,7 @@ return (
 <Dashboard
 items={items}
 heroWord={WORDS[wordIdx]}
+looks={savedLooks}
 goToCloset={() => setTab('closet')}
 />
 )}
@@ -315,25 +421,31 @@ onSeasonsFilter={setActiveSeasonsFilter}
 onUploadClick={onUploadClick}
 fileInputRef={fileInputRef}
 onFileChange={onFileChange}
-onUpdateItem={updateItem}
+onUpdateItem={updateClosetItem}
 onDeleteItem={deleteItem}
 />
 )}
 
 {tab === 'builder' && (
 <Builder
-items={items}
-outfit={outfit}
-onDrop={onDrop}
-onDragOver={onDragOver}
-onDragStart={onDragStart}
-onClearZone={(zone) => setOutfit(prev => { const next = structuredClone(prev); if (zone === 'accessories') next.items.accessories = []; else next.items[zone] = null; return next })}
-onSaveOutfit={saveCurrentOutfit}
-/>
+        items={items}
+        outfit={outfit}
+        selectedItemId={selectedItemId}
+        setSelectedItemId={setSelectedItemId}
+        onDragOver={onDragOver}
+        onDragStart={onDragStart}
+        handleCanvasDrop={handleCanvasDrop}
+        updateOutfitItem={updateOutfitItem}
+        moveLayer={moveLayer}
+        removeOutfitItem={removeOutfitItem}
+        onSaveOutfit={saveCurrentOutfit}
+        canvasRef={canvasRef}
+        setOutfit={setOutfit}
+      />
 )}
 
 {tab === 'gallery' && (
-<Gallery items={items} savedLooks={savedLooks} onDeleteLook={deleteLook} />
+<Gallery savedLooks={savedLooks} onDeleteLook={deleteLook} onUpdateLook={updateSavedLook} />
 )}
 </main>
 </div>
@@ -341,24 +453,70 @@ onSaveOutfit={saveCurrentOutfit}
 }
 
 // ----------------------- Components -------------------------
+function Auth({ onAuth }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [mode, setMode] = useState('signin')
+
+  async function submit(e) {
+    e.preventDefault()
+    if (mode === 'signup') {
+      const { data, error } = await supabase.auth.signUp({ email, password })
+      if (error) return alert(error.message)
+      if (!data.session) {
+        const { data: signInData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password })
+        if (signInErr) return alert(signInErr.message)
+        onAuth?.(signInData.user)
+      } else {
+        onAuth?.(data.user)
+      }
+    } else {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) return alert(error.message)
+      onAuth?.(data.user)
+    }
+  }
+
+  return (
+    <div className="auth">
+      <form onSubmit={submit}>
+        <h2 className="form-title">{mode === 'signin' ? 'Sign In' : 'Create Account'}</h2>
+        <input className="input" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" />
+        <input
+          className="input"
+          type="password"
+          value={password}
+          onChange={e => setPassword(e.target.value)}
+          placeholder="Password"
+        />
+        <button className="btn" type="submit">{mode === 'signin' ? 'Enter' : 'Register'}</button>
+        <button
+          type="button"
+          className="toggle"
+          onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
+        >
+          {mode === 'signin' ? 'Need an account? Sign Up' : 'Have an account? Sign In'}
+        </button>
+      </form>
+    </div>
+  )
+}
+
 function NavBtn({ label, active, onClick }) {
 return (
 <button className={`nav-btn ${active ? 'active' : ''}`} onClick={onClick}>{label}</button>
 )
 }
 
-function Dashboard({ items, heroWord, goToCloset }) {
-const [bgUrl, setBgUrl] = useState(() => { try { return localStorage.getItem('ensemble.heroUrl') || '' } catch { return '' } })
-function setHeroFromPrompt() {
-const u = window.prompt('Paste a direct image URL (.jpg/.png works best):', bgUrl)
-if (u != null) { setBgUrl(u); try { localStorage.setItem('ensemble.heroUrl', u) } catch { } }
-}
-const heroStyle = bgUrl ? { backgroundImage: `url(${bgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}
+function Dashboard({ items, looks, heroWord, goToCloset }) {
+const HERO_BG = 'https://i.pinimg.com/1200x/f9/74/0b/f9740b79ef42a33a3ccba2b913654573.jpg'
+const heroStyle = { backgroundImage: `url(${HERO_BG})`, backgroundSize: 'cover', backgroundPosition: 'center' }
 const recent = (items || []).slice(0, 6)
 return (
 <section className="section">
-<div className={`hero ${bgUrl ? 'with-bg' : ''}`} style={heroStyle}>
-{bgUrl && <div className="hero-overlay" aria-hidden="true" />}
+<div className="hero with-bg" style={heroStyle}>
+<div className="hero-overlay" aria-hidden="true" />
+<div className="hero-content">
 <h1 className="hero-title">
 <span className="hero-be">BE</span>
 <span className="hero-word"><span key={heroWord} className="swap-word">{heroWord}</span></span>
@@ -366,7 +524,7 @@ return (
 <p className="hero-sub">High‑contrast editorial tools for decisive dressing.</p>
 <div className="cta-row">
 <button className="btn" onClick={goToCloset}>Go to Closet</button>
-<button className="btn" onClick={setHeroFromPrompt}>Set hero image</button>
+</div>
 </div>
 </div>
 
@@ -388,7 +546,7 @@ return (
 <h2 className="section-title"><span className="section-num">02</span> Stats</h2>
 <div className="stats">
 <div className="stat-box"><div className="stat-num">{items?.length || 0}</div><div className="stat-label">Items</div></div>
-<div className="stat-box"><div className="stat-num">{0 + ''}</div><div className="stat-label">Looks</div></div>
+<div className="stat-box"><div className="stat-num">{looks?.length || 0}</div><div className="stat-label">Looks</div></div>
 <div className="stat-box"><div className="stat-num">—</div><div className="stat-label">Last Added</div></div>
 </div>
 </section>
@@ -435,12 +593,10 @@ iconByKey(i.icon, { size: 40 })
 )}
 </div>
 </div>
-<div className="item-meta">
-<div className="item-title">{i.name}</div>
-<div className="item-sub">{i.category}</div>
-<div className="item-tags">
-{i.colorTags?.map((c, idx) => <span key={idx} className="tag">{c}</span>)}
-{i.seasons?.map((s, idx) => <span key={s+idx} className="tag">{s}</span>)}
+<div className="item-overlay">
+<div className="overlay-title">{i.name}</div>
+<div className="overlay-tags">
+{i.seasons?.map((s, idx) => <span key={s+idx} className="overlay-tag">{s}</span>)}
 </div>
 </div>
 </div>
@@ -561,126 +717,230 @@ return (
 )
 }
 
-function Builder({ items, outfit, onDrop, onDragOver, onClearZone, onDragStart, onSaveOutfit }) {
-const getItem = id => items.find(i => i.id === id)
-return (
-<section className="section builder">
-<div className="builder-left">
-<h2 className="section-title"><span className="section-num">03</span> Categories</h2>
-<p className="muted">Drag items into the board boxes.</p>
-<div className="filmstrip">
-{items.map(i => (
-<div key={i.id} className={`film-cell ${i.category==='uncategorized'?'dim':''}`} draggable={i.category!=='uncategorized'} onDragStart={e => onDragStart?.(e, i)}>
-<div className="film-frame">
-{i.imageUrl ? <img src={i.imageUrl} alt="img" className="no-frame-img small" /> : iconByKey(i.icon, { size: 28 })}
-</div>
-<div className="film-caption">{i.name}</div>
-</div>
-))}
-</div>
-</div>
-
-{/* Board center — fixed layout like your reference */}
-<div className="builder-center">
-<div className="board">
-<div className="board-area outerwear">
-<DropZone label="Outerwear" zone="outerwear" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.outerwear} onClear={() => onClearZone('outerwear')}>
-{outfit.items.outerwear && <ZoneItem item={getItem(outfit.items.outerwear)} />}
-</DropZone>
-</div>
-<div className="board-area top">
-<DropZone label="Top" zone="top" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.top} onClear={() => onClearZone('top')}>
-{outfit.items.top && <ZoneItem item={getItem(outfit.items.top)} />}
-</DropZone>
-</div>
-<div className="board-area bottom">
-<DropZone label="Bottom" zone="bottom" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.bottom} onClear={() => onClearZone('bottom')}>
-{outfit.items.bottom && <ZoneItem item={getItem(outfit.items.bottom)} />}
-</DropZone>
-</div>
-<div className="board-area shoes">
-<DropZone label="Shoes" zone="shoes" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.shoes} onClear={() => onClearZone('shoes')}>
-{outfit.items.shoes && <ZoneItem item={getItem(outfit.items.shoes)} />}
-</DropZone>
-</div>
-<div className="board-area accessories">
-<DropZone label="Accessories" zone="accessories" onDrop={onDrop} onDragOver={onDragOver} filled={outfit.items.accessories.length>0} onClear={() => onClearZone('accessories')}>
-{outfit.items.accessories.map(id => { const it = getItem(id); return <ZoneItem key={id} item={it} small /> })}
-</DropZone>
-</div>
-</div>
-</div>
-
-<div className="builder-right">
-<div className="preview">
-<div className="preview-header"><div className="preview-title">Current Look</div></div>
-<div className="preview-actions"><button className="btn" onClick={onSaveOutfit}>Save Look</button></div>
-</div>
-</div>
-</section>
-)
+function DraggableResizable({ data, onUpdate, onSelect, children }) {
+  return (
+    <Rnd
+      size={{ width: 100 * data.scale, height: 100 * data.scale }}
+      position={{ x: data.x, y: data.y }}
+      onDragStop={(e, d) => onUpdate({ x: d.x, y: d.y })}
+      dragHandleClassName="drag-handle"
+      dragGrid={[1, 1]}
+      bounds=".free-canvas"
+      enableResizing={false}
+      style={{ cursor: 'grab', zIndex: data.z, userSelect: 'none', position: 'absolute' }}
+      onMouseDown={onSelect}
+    >
+      <div className="drag-handle" style={{ width: '100%', height: '100%' }}>
+        <div style={{ width: '100%', height: '100%', pointerEvents: 'none' }}>
+          {children}
+        </div>
+      </div>
+    </Rnd>
+  )
 }
 
-function DropZone({ label, zone, children, onDrop, onDragOver, filled, onClear }) {
-return (
-<div className={`dropzone ${filled ? 'filled' : ''}`} onDragOver={onDragOver} onDrop={(e) => onDrop(e, zone)} tabIndex={0} aria-label={`${label} drop zone`}>
-<div className="dz-label">{label}</div>
-<button className="dz-clear" onClick={onClear} title="Clear"><X size={12} /></button>
-<div className="dz-content">{children}</div>
-</div>
-)
+function Builder({ items, outfit, selectedItemId, setSelectedItemId, onDragOver, onDragStart, handleCanvasDrop, updateOutfitItem, moveLayer, removeOutfitItem, onSaveOutfit, canvasRef, setOutfit }) {
+  const getItem = id => items.find(i => i.id === id)
+  const selectedItem = outfit.items.find(i => i.id === selectedItemId)
+  const itemsSortedByZ = [...outfit.items].sort((a, b) => b.z - a.z)
+  return (
+    <section className="section builder">
+      <div className="builder-left">
+        <h2 className="section-title"><span className="section-num">03</span> Categories</h2>
+        <p className="muted">Drag items onto the canvas.</p>
+        <div className="filmstrip">
+          {items.map(i => (
+            <div key={i.id} className={`film-cell ${i.category==='uncategorized'?'dim':''}`} draggable={i.category!=='uncategorized'} onDragStart={e => onDragStart?.(e, i)}>
+              <div className="film-frame">
+                {i.imageUrl ? <img src={i.imageUrl} alt="img" className="no-frame-img small" /> : iconByKey(i.icon, { size: 28 })}
+              </div>
+              <div className="film-caption">{i.name}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="builder-center">
+        <div ref={canvasRef} className="free-canvas" onDragOver={onDragOver} onDrop={handleCanvasDrop}>
+          {outfit.items.map(o => {
+            const it = getItem(o.id)
+            return (
+              <DraggableResizable
+                key={o.id}
+                data={o}
+                onUpdate={changes => updateOutfitItem(o.id, changes)}
+                onSelect={() => setSelectedItemId(o.id)}
+              >
+                {it?.imageUrl ? (
+                  <img src={it.imageUrl} alt={it.name} draggable={false} />
+                ) : (
+                  iconByKey(it.icon, { size: 36 })
+                )}
+              </DraggableResizable>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="builder-right">
+        <div className="form-row">
+          <div className="form-label">Look Name</div>
+          <input value={outfit.name} onChange={e => setOutfit(prev => ({ ...prev, name: e.target.value }))} />
+        </div>
+        <div className="filters">
+          {ALL_SEASONS.map(s => (
+            <label key={s} className={`badge ${outfit.seasons?.includes(s) ? 'active' : ''}`}>
+              <input
+                type="checkbox"
+                checked={outfit.seasons?.includes(s) || false}
+                onChange={() =>
+                  setOutfit(prev => {
+                    const list = prev.seasons || []
+                    const next = list.includes(s) ? list.filter(x => x !== s) : [...list, s]
+                    return { ...prev, seasons: next }
+                  })
+                }
+              />
+              {s}
+            </label>
+          ))}
+        </div>
+        {selectedItem && (
+          <div className="size-control">
+            <input
+              type="range"
+              min="0.5"
+              max="2"
+              step="0.05"
+              value={selectedItem.scale}
+              onChange={e => updateOutfitItem(selectedItem.id, { scale: parseFloat(e.target.value) })}
+            />
+            <button className="btn danger" onClick={() => removeOutfitItem(selectedItem.id)}>Delete Item</button>
+          </div>
+        )}
+        <div className="layer-panel">
+          {itemsSortedByZ.map(it => {
+            const meta = getItem(it.id)
+            return (
+              <div
+                key={it.id}
+                className={`layer-row ${selectedItemId === it.id ? 'selected' : ''}`}
+                onClick={() => setSelectedItemId(it.id)}
+              >
+                <span>{meta?.name || it.id}</span>
+                <span>
+                  <button onClick={e => { e.stopPropagation(); moveLayer(it.id, 1) }}>↑</button>
+                  <button onClick={e => { e.stopPropagation(); moveLayer(it.id, -1) }}>↓</button>
+                  <button onClick={e => { e.stopPropagation(); removeOutfitItem(it.id) }}><X size={12} /></button>
+                </span>
+              </div>
+            )
+          })}
+        </div>
+        <div className="preview">
+          <div className="preview-header"><div className="preview-title">Current Look</div></div>
+          <div className="preview-actions"><button className="btn" onClick={onSaveOutfit}>Save Look</button></div>
+        </div>
+      </div>
+    </section>
+  )
 }
 
-function ZoneItem({ item, small }) {
-if (!item) return null
-return (
-<div className={`zone-item ${small ? 'small' : ''}`} title={item.name}>
-{item.imageUrl ? <img src={item.imageUrl} alt={item.name} className={`no-frame-img ${small ? 'small' : ''}`} /> : iconByKey(item.icon, { size: small ? 18 : 28 })}
-<span className="zone-name">{item.name}</span>
-</div>
-)
+
+function Gallery({ savedLooks, onDeleteLook, onUpdateLook }) {
+  const [activeSeasons, setActiveSeasons] = useState([])
+  const [editingId, setEditingId] = useState(null)
+  const list = (savedLooks || []).filter(l => (activeSeasons.length ? activeSeasons.every(s => l.seasons?.includes(s)) : true))
+  const editing = savedLooks.find(l => l.id === editingId)
+  return (
+    <section className="section">
+      <h2 className="section-title"><span className="section-num">04</span> Saved Looks</h2>
+      <div className="filters">
+        {ALL_SEASONS.map(s => (
+          <label key={s} className={`badge ${activeSeasons.includes(s) ? 'active' : ''}`}>
+            <input type="checkbox" checked={activeSeasons.includes(s)} onChange={() => setActiveSeasons(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])} />
+            {s}
+          </label>
+        ))}
+      </div>
+      <div className="masonry">
+        {list.map(look => (
+          <div key={look.id} className="masonry-card">
+            <div className="polaroid">
+              <div className="polaroid-frame no-frame">
+                <div className="free-canvas static" style={{ width: look.w, height: look.h }}>
+                  {look.items.map(o => {
+                    const style = {
+                      position: 'absolute',
+                      left: o.x,
+                      top: o.y,
+                      width: 100 * o.scale,
+                      height: 100 * o.scale,
+                      zIndex: o.z,
+                    }
+                    return (
+                      <div key={o.id} style={style}>
+                        {o.imageUrl ? (
+                          <img src={o.imageUrl} alt={o.name} className="no-frame-img" />
+                        ) : (
+                          iconByKey(o.icon, { size: 36 })
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+            <div className="card-body">
+              <div className="card-title">{look.name}</div>
+              <div className="card-sub italic">{look.seasons?.join(', ') || 'Saved outfit'}</div>
+              <button className="btn" onClick={() => setEditingId(look.id)}>Edit</button>
+              <button className="btn danger" onClick={() => onDeleteLook(look.id)}><Trash2 size={16}/> Delete Look</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      {editing && (
+        <LookEditor
+          look={editing}
+          onClose={() => setEditingId(null)}
+          onSave={changes => { onUpdateLook(editing.id, changes); setEditingId(null) }}
+        />
+      )}
+    </section>
+  )
 }
 
-function Gallery({ items, savedLooks, onDeleteLook }) {
-const list = savedLooks || []
-return (
-<section className="section">
-<h2 className="section-title"><span className="section-num">04</span> Saved Looks</h2>
-<div className="masonry">
-{list.map(look => (
-<div key={look.id} className="masonry-card">
-<div className="polaroid">
-<div className="polaroid-frame no-frame">
-<div className="board board-static">
-{['outerwear','top','bottom','shoes','accessories'].map(zone => {
-if (zone === 'accessories') return (
-<div key={zone} className={`board-area ${zone}`}>
-<div className="acc-stack">
-{(look.items.accessories || []).map(aid => { const acc = items.find(i => i.id === aid); return <span key={aid} className="tag">{acc?.name || 'Accessory'}</span> })}
-</div>
-</div>
-)
-const id = look.items[zone]
-const it = id && items.find(i => i.id === id)
-return (
-<div key={zone} className={`board-area ${zone}`}>
-{it ? (it.imageUrl ? <img src={it.imageUrl} alt={it.name} className="no-frame-img" /> : iconByKey(it.icon, { size: 36 })) : <div className="look-empty" />}
-</div>
-)
-})}
-</div>
-</div>
-</div>
-<div className="card-body">
-<div className="card-title">{look.name}</div>
-<div className="card-sub italic">Saved outfit</div>
-<button className="btn danger" onClick={() => onDeleteLook(look.id)}><Trash2 size={16}/> Delete Look</button>
-</div>
-</div>
-))}
-</div>
-</section>
-)
+function LookEditor({ look, onSave, onClose }) {
+  const [name, setName] = useState(look.name)
+  const [seasons, setSeasons] = useState(look.seasons || [])
+  function toggleSeason(s) { setSeasons(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s]) }
+  return (
+    <div className="drawer">
+      <div className="drawer-head">
+        <div className="form-title">Edit Look</div>
+        <button className="icon-btn" onClick={onClose}><X size={16} /></button>
+      </div>
+      <div className="form-row">
+        <div className="form-label">Name</div>
+        <input value={name} onChange={e => setName(e.target.value)} />
+      </div>
+      <div className="form-row">
+        <div className="form-label">Seasons</div>
+        <div className="filters">
+          {ALL_SEASONS.map(s => (
+            <label key={s} className={`badge ${seasons.includes(s) ? 'active' : ''}`}>
+              <input type="checkbox" checked={seasons.includes(s)} onChange={() => toggleSeason(s)} />
+              {s}
+            </label>
+          ))}
+        </div>
+      </div>
+      <div className="drawer-actions">
+        <button className="btn" onClick={() => onSave({ name, seasons })}>Save</button>
+      </div>
+    </div>
+  )
 }
 
 // ----------------------- Styles ------------------------------
@@ -706,14 +966,15 @@ const CSS = `
 
 .hero{ position:relative; color:var(--white); padding:28px; box-shadow:4px 4px 0 var(--black) inset; background:var(--black); min-height:220px; display:flex; flex-direction:column; justify-content:center }
 .hero.with-bg{ background-color:#000; background-blend-mode:normal }
-.hero-overlay{ position:absolute; inset:0; background:linear-gradient(180deg, rgba(0,0,0,.55), rgba(0,0,0,.35)); pointer-events:none }
-.hero-title{ font-size:32px; display:flex; flex-direction:column; gap:6px; z-index:1 }
+.hero-overlay{ position:absolute; inset:0; background:rgba(0,0,0,.5); pointer-events:none; z-index:0 }
+.hero-content{ position:relative; z-index:1 }
+.hero-title{ font-size:32px; display:flex; flex-direction:column; gap:6px }
 .hero-be{ font-weight:700; letter-spacing:4px }
 .hero-word{ font-style:italic; line-height:1 }
 .swap-word{ display:inline-block; animation:wordfade .45s ease }
 @keyframes wordfade{ 0%{opacity:0; transform:translateY(6px)} 100%{opacity:1; transform:translateY(0)} }
-.hero-sub{ font-size:16px; color:var(--off); z-index:1 }
-.cta-row{ display:flex; gap:8px; margin-top:12px; z-index:1 }
+.hero-sub{ font-size:16px; color:var(--off) }
+.cta-row{ display:flex; gap:8px; margin-top:12px }
 
 .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:16px }
 .card{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); display:flex; gap:10px; padding:12px; transition:transform .1s }
@@ -743,16 +1004,18 @@ const CSS = `
 .btn.danger{ border-color:var(--red); color:var(--red) }
 .icon-btn{ border:2px solid var(--black); background:var(--white); padding:4px; cursor:pointer }
 
-.item-card{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); cursor:grab }
+.item-card{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); cursor:grab; position:relative; overflow:visible }
 .item-card:active{ cursor:grabbing }
 .item-card.hint{ opacity:.85; outline:2px dashed var(--red) }
 .polaroid{ background:var(--white); border-bottom:2px solid var(--black); padding:8px }
 .polaroid-frame{ border:2px solid var(--black); height:120px; display:grid; place-items:center }
 .polaroid-frame.no-frame{ border:none; box-shadow:none }
-.item-meta{ padding:10px }
-.item-title{ font-weight:700 }
-.item-sub{ color:var(--gray); font-size:12px }
-.item-tags .tag{ display:inline-block; border:2px solid var(--black); padding:2px 6px; margin:4px 4px 0 0; font-size:12px; font-weight:700; background:var(--white) }
+.masonry-card .polaroid-frame{ height:auto; overflow:hidden }
+.item-overlay{ position:absolute; inset:0; background:rgba(0,0,0,.6); color:var(--white); display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; opacity:0; transition:opacity .3s; pointer-events:none }
+.item-card:hover .item-overlay{ opacity:1 }
+.overlay-title{ font-weight:700; margin-bottom:4px }
+.overlay-tags{ display:flex; gap:4px; flex-wrap:wrap; justify-content:center }
+.overlay-tag{ border:1px solid var(--white); padding:2px 6px; font-size:12px; font-weight:700; color:var(--white) }
 
 /* Drawer */
 .drawer{ position:fixed; right:16px; bottom:16px; width:360px; max-width:calc(100vw - 32px); background:var(--white); border:2px solid var(--black); box-shadow:6px 6px 0 var(--black); padding:12px; z-index:20 }
@@ -780,25 +1043,21 @@ const CSS = `
 .film-cell.dim{ opacity:.5 }
 .film-frame{ border:2px solid var(--black); height:60px; display:grid; place-items:center; box-shadow:4px 4px 0 var(--black) }
 .film-caption{ font-size:12px; text-align:center; margin-top:6px }
+.size-control{ margin-bottom:12px }
+.layer-panel{ border:2px solid var(--black); background:var(--white); margin-bottom:12px }
+.layer-row{ display:flex; justify-content:space-between; align-items:center; padding:4px 8px; cursor:pointer }
+.layer-row.selected{ background:var(--black); color:var(--white) }
+.layer-row button{ margin-left:4px }
 
-/* Board layout */
-.board{ position:relative; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:160px 160px 140px; gap:10px }
-.board-static .dropzone{ pointer-events:none }
-.board-area.outerwear{ grid-column:1/2; grid-row:1/2 }
-.board-area.top{ grid-column:2/3; grid-row:1/2 }
-.board-area.bottom{ grid-column:2/3; grid-row:2/3 }
-.board-area.shoes{ grid-column:1/2; grid-row:3/4 }
-.board-area.accessories{ grid-column:2/3; grid-row:3/4 }
+/* Auth */
+.auth{ display:flex; align-items:center; justify-content:center; min-height:100vh }
+.auth form{ display:flex; flex-direction:column; gap:12px; border:2px solid var(--black); background:var(--white); padding:20px; box-shadow:4px 4px 0 var(--black) }
+.auth .toggle{ background:none; border:none; color:var(--black); text-decoration:underline; cursor:pointer; padding:0; font-family:${FONT_STACK} }
 
-.dropzone{ position:relative; border:2px dashed var(--black); padding:6px; display:grid; place-items:center; transition:transform .08s, border-color .12s; background:var(--white) }
-.dropzone.filled{ border-style:solid }
-.dz-label{ position:absolute; top:-10px; left:8px; background:var(--white); padding:0 6px; font-size:12px; letter-spacing:1px }
-.dz-clear{ position:absolute; top:4px; right:4px; border:2px solid var(--black); background:var(--white); cursor:pointer; padding:2px }
-.dz-content{ display:inline-flex; gap:8px; align-items:center }
-
-.zone-item{ display:inline-flex; align-items:center; gap:8px; padding:4px 8px; border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black) }
-.zone-item.small{ transform:scale(.9) }
-.zone-name{ font-size:14px }
+/* Free canvas */
+.free-canvas{ position:relative; width:100%; height:400px; border:2px dashed var(--black); background:var(--white) }
+.free-canvas.static{ pointer-events:none; border:none; overflow:hidden }
+.free-canvas img{ width:100%; height:100%; object-fit:contain; pointer-events:none }
 
 @keyframes snap{ 0%{transform:scale(.98)} 100%{transform:scale(1)} }
 @keyframes bounce{ 0%{transform:translateY(0)} 30%{transform:translateY(-6px)} 60%{transform:translateY(0)} 100%{transform:translateY(0)} }
@@ -811,10 +1070,8 @@ const CSS = `
 .preview-title{ font-weight:700 }
 .preview-actions{ padding:8px }
 
-.masonry{ column-count:3; column-gap:12px }
-.masonry-card{ break-inside:avoid; border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); margin-bottom:12px }
-.look-empty{ width:36px; height:36px; border:1px dashed var(--black) }
-.acc-stack{ display:flex; gap:6px; flex-wrap:wrap }
+.masonry{ display:grid; grid-template-columns:repeat(2,1fr); gap:12px }
+.masonry-card{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black) }
 
 .no-frame-img{ max-width:100%; max-height:100%; object-fit:contain; display:block; background:transparent }
 .no-frame-img.small{ max-height:40px }
