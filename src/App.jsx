@@ -518,29 +518,44 @@ return (
 </div>
 </div>
 
-<div className="grid">
-{items.map(i => (
-<div key={i.id} className={`item-card ${i.category==='uncategorized' ? 'hint' : ''}`} draggable={i.category!=='uncategorized'} onDragStart={(e) => onDragStart(e, i)} onClick={() => setEditing(i.id)} title={i.category==='uncategorized' ? 'Set category in editor to enable drag' : 'Drag to Builder board'}>
-<div className="polaroid">
-<div className={`polaroid-frame ${i.imageUrl ? 'no-frame' : ''}`}>
-{i.imageUrl ? (
-<img src={i.imageUrl} alt={i.name} className="no-frame-img" />
-) : (
-iconByKey(i.icon, { size: 40 })
-)}
-</div>
-</div>
-<div className="item-meta">
-<div className="item-title">{i.name}</div>
-<div className="item-sub">{i.category}</div>
-<div className="item-tags">
-{i.colorTags?.map((c, idx) => <span key={idx} className="tag">{c}</span>)}
-{i.seasons?.map((s, idx) => <span key={s+idx} className="tag">{s}</span>)}
-</div>
-</div>
-</div>
-))}
-</div>
+      <div className="closet-grid">
+        {items.map(i => {
+          const seasonsText = i.seasons?.length ? i.seasons.join(' • ') : 'Seasonless staple'
+          return (
+            <div
+              key={i.id}
+              className={`closet-tile ${i.category === 'uncategorized' ? 'hint' : ''}`}
+              draggable={i.category !== 'uncategorized'}
+              onDragStart={e => onDragStart(e, i)}
+              onClick={() => setEditing(i.id)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setEditing(i.id)
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              title={i.category === 'uncategorized' ? 'Set category in editor to enable drag' : 'Drag to Builder board'}
+              aria-label={`${i.name || 'Closet item'}${i.seasons?.length ? `, seasons ${i.seasons.join(', ')}` : ''}`}
+            >
+              <div className="closet-thumb">
+                {i.imageUrl ? (
+                  <img src={i.imageUrl} alt={i.name || 'Closet item'} className="closet-img" />
+                ) : (
+                  <div className="closet-icon" aria-hidden="true">{iconByKey(i.icon, { size: 48 })}</div>
+                )}
+                <div className="closet-overlay">
+                  <div className="closet-label">
+                    <div className="closet-name">{i.name || 'Untitled Piece'}</div>
+                    <div className="closet-season">{seasonsText}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
 
 {selected && (
 <ItemEditor
@@ -1013,6 +1028,10 @@ const CSS = `
 .cta-row{ display:flex; gap:8px; margin-top:12px; z-index:1 }
 
 .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:16px }
+.closet-grid{ display:grid; gap:18px; grid-template-columns:repeat(1, minmax(0, 1fr)) }
+@media (min-width:640px){ .closet-grid{ grid-template-columns:repeat(2, minmax(0, 1fr)) } }
+@media (min-width:900px){ .closet-grid{ grid-template-columns:repeat(3, minmax(0, 1fr)) } }
+@media (min-width:1200px){ .closet-grid{ grid-template-columns:repeat(4, minmax(0, 1fr)) } }
 .card{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); display:flex; gap:10px; padding:12px; transition:transform .1s }
 .card:hover{ transform:translate(-2px,-2px) }
 .card-frame{ width:60px; height:60px; display:grid; place-items:center; border:2px solid var(--black) }
@@ -1040,16 +1059,22 @@ const CSS = `
 .btn.danger{ border-color:var(--red); color:var(--red) }
 .icon-btn{ border:2px solid var(--black); background:var(--white); padding:4px; cursor:pointer }
 
-.item-card{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); cursor:grab }
-.item-card:active{ cursor:grabbing }
-.item-card.hint{ opacity:.85; outline:2px dashed var(--red) }
+.closet-tile{ position:relative; display:flex; align-items:center; justify-content:center; border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); cursor:grab; overflow:hidden; aspect-ratio:3/4; transition:transform .12s, box-shadow .12s }
+.closet-tile:active{ cursor:grabbing }
+.closet-tile:hover{ transform:translate(-2px,-2px); box-shadow:6px 6px 0 var(--black) }
+.closet-tile.hint{ cursor:pointer; border-style:dashed; border-color:var(--red); box-shadow:4px 4px 0 rgba(139,0,0,.35) }
+.closet-tile:focus-visible{ outline:3px solid var(--red); outline-offset:4px }
+.closet-thumb{ position:relative; flex:1; display:flex; align-items:center; justify-content:center; padding:18px; background:var(--white) }
+.closet-img{ width:100%; height:100%; object-fit:contain }
+.closet-icon{ display:grid; place-items:center; width:80px; height:80px; border:2px solid var(--black); box-shadow:4px 4px 0 var(--black); background:var(--white) }
+.closet-overlay{ position:absolute; inset:0; background:rgba(0,0,0,.68); color:var(--white); display:flex; align-items:center; justify-content:center; text-align:center; padding:20px; opacity:0; transition:opacity .15s ease; pointer-events:none }
+.closet-tile:hover .closet-overlay, .closet-tile:focus-visible .closet-overlay{ opacity:1 }
+.closet-label{ display:flex; flex-direction:column; gap:6px }
+.closet-name{ font-weight:700; font-size:16px; text-transform:uppercase; letter-spacing:1px }
+.closet-season{ font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--off) }
 .polaroid{ background:var(--white); border-bottom:2px solid var(--black); padding:16px }
 .polaroid-frame{ border:2px solid var(--black); height:320px; display:grid; place-items:center }
 .polaroid-frame.no-frame{ border:none; box-shadow:none; height:320px }
-.item-meta{ padding:10px }
-.item-title{ font-weight:700 }
-.item-sub{ color:var(--gray); font-size:12px }
-.item-tags .tag{ display:inline-block; border:2px solid var(--black); padding:2px 6px; margin:4px 4px 0 0; font-size:12px; font-weight:700; background:var(--white) }
 
 /* Drawer */
 .drawer{ position:fixed; right:16px; bottom:16px; width:360px; max-width:calc(100vw - 32px); background:var(--white); border:2px solid var(--black); box-shadow:6px 6px 0 var(--black); padding:12px; z-index:20 }
