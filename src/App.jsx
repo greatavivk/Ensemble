@@ -951,7 +951,7 @@ function Gallery({ items, savedLooks, onDeleteLook }) {
                             {display.imageUrl ? (
                               <img src={display.imageUrl} alt={display.name || 'Item'} className="canvas-img" />
                             ) : (
-                              iconByKey(display.icon || 'shirt', { size: 48 })
+                              iconByKey(display.icon || 'shirt', { size: 64 })
                             )}
                           </div>
                         </div>
@@ -1043,9 +1043,9 @@ const CSS = `
 .item-card{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); cursor:grab }
 .item-card:active{ cursor:grabbing }
 .item-card.hint{ opacity:.85; outline:2px dashed var(--red) }
-.polaroid{ background:var(--white); border-bottom:2px solid var(--black); padding:8px }
-.polaroid-frame{ border:2px solid var(--black); height:120px; display:grid; place-items:center }
-.polaroid-frame.no-frame{ border:none; box-shadow:none }
+.polaroid{ background:var(--white); border-bottom:2px solid var(--black); padding:16px }
+.polaroid-frame{ border:2px solid var(--black); height:320px; display:grid; place-items:center }
+.polaroid-frame.no-frame{ border:none; box-shadow:none; height:320px }
 .item-meta{ padding:10px }
 .item-title{ font-weight:700 }
 .item-sub{ color:var(--gray); font-size:12px }
@@ -1106,8 +1106,11 @@ const CSS = `
 .muted.small{ font-size:12px; color:var(--gray) }
 
 /* Gallery */
-.masonry{ column-count:3; column-gap:12px }
-.masonry-card{ break-inside:avoid; border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); margin-bottom:12px }
+.masonry{ display:grid; grid-template-columns:1fr; gap:24px }
+.masonry-card{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); display:flex; flex-direction:column }
+.masonry-card .polaroid{ flex:1 }
+.masonry-card .card-body{ padding:16px }
+@media (min-width:900px){ .masonry{ grid-template-columns:repeat(2, minmax(0, 1fr)) } }
 
 .no-frame-img{ max-width:100%; max-height:100%; object-fit:contain; display:block; background:transparent }
 .no-frame-img.small{ max-height:40px }
