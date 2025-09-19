@@ -76,6 +76,11 @@ return <div {...props} style={{ width: props.size || 20, height: props.size || 2
 // ----------------------- Helpers ----------------------------
 const ALL_SEASONS = ['Spring', 'Summer', 'Fall', 'Winter']
 const WORDS = ['stylish', 'chic', 'fashionable', 'YOURSELF']
+const HERO_IMAGES = [
+  'https://pin.it/3Blf4IIwc',
+  'https://pin.it/594gYVUgI',
+  'https://pin.it/7CKNUhA0a'
+]
 
 const CATEGORIES = [
 { key: 'all', label: 'All' },
@@ -348,17 +353,13 @@ return (
 }
 
 function Dashboard({ items, heroWord, goToCloset }) {
-const [bgUrl, setBgUrl] = useState(() => { try { return localStorage.getItem('ensemble.heroUrl') || '' } catch { return '' } })
-function setHeroFromPrompt() {
-const u = window.prompt('Paste a direct image URL (.jpg/.png works best):', bgUrl)
-if (u != null) { setBgUrl(u); try { localStorage.setItem('ensemble.heroUrl', u) } catch { } }
-}
-const heroStyle = bgUrl ? { backgroundImage: `url(${bgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}
+const bgUrl = useMemo(() => HERO_IMAGES[Math.floor(Math.random() * HERO_IMAGES.length)], [])
+const heroStyle = { backgroundImage: `url(${bgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
 const recent = (items || []).slice(0, 6)
 return (
 <section className="section">
-<div className={`hero ${bgUrl ? 'with-bg' : ''}`} style={heroStyle}>
-{bgUrl && <div className="hero-overlay" aria-hidden="true" />}
+<div className={`hero with-bg`} style={heroStyle}>
+<div className="hero-overlay" aria-hidden="true" />
 <h1 className="hero-title">
 <span className="hero-be">BE</span>
 <span className="hero-word"><span key={heroWord} className="swap-word">{heroWord}</span></span>
@@ -366,7 +367,6 @@ return (
 <p className="hero-sub">High‑contrast editorial tools for decisive dressing.</p>
 <div className="cta-row">
 <button className="btn" onClick={goToCloset}>Go to Closet</button>
-<button className="btn" onClick={setHeroFromPrompt}>Set hero image</button>
 </div>
 </div>
 
