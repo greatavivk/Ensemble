@@ -885,6 +885,7 @@ function CanvasItem({ data, item, boardRef, selected, onSelect, onMove }) {
       onPointerDown={handlePointerDown}
       onClick={e => { e.stopPropagation(); onSelect?.(data.canvasId) }}
       tabIndex={0}
+      aria-label={item?.name || 'Closet item'}
       onKeyDown={e => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
@@ -892,14 +893,13 @@ function CanvasItem({ data, item, boardRef, selected, onSelect, onMove }) {
         }
       }}
     >
-      <div className="canvas-inner">
+      <div className="canvas-figure">
         {item?.imageUrl ? (
           <img src={item.imageUrl} alt={item.name} className="canvas-img" />
         ) : (
-          iconByKey(item?.icon || 'shirt', { size: 36 })
+          iconByKey(item?.icon || 'shirt', { size: 60 })
         )}
       </div>
-      <div className="canvas-label">{item?.name || 'Item'}</div>
     </div>
   )
 }
@@ -945,12 +945,13 @@ function Gallery({ items, savedLooks, onDeleteLook }) {
                             transform: `translate(-50%, -50%) scale(${ci.scale || 1})`,
                             zIndex: ci.z || 1,
                           }}
+                          aria-label={display.name || 'Item'}
                         >
-                          <div className="canvas-inner">
+                          <div className="canvas-figure">
                             {display.imageUrl ? (
                               <img src={display.imageUrl} alt={display.name || 'Item'} className="canvas-img" />
                             ) : (
-                              iconByKey(display.icon || 'shirt', { size: 28 })
+                              iconByKey(display.icon || 'shirt', { size: 48 })
                             )}
                           </div>
                         </div>
@@ -1084,14 +1085,14 @@ const CSS = `
 .free-board.static{ min-height:320px; pointer-events:none }
 .board-hint{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--gray); font-style:italic; padding:16px; pointer-events:none }
 .board-hint.small{ font-size:12px }
-.canvas-item{ position:absolute; width:150px; height:150px; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; cursor:grab; transition:box-shadow .12s }
+.canvas-item{ position:absolute; width:150px; height:150px; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:grab; }
 .canvas-item.dragging{ cursor:grabbing }
-.canvas-item .canvas-inner{ width:120px; height:110px; border:2px solid var(--black); background:var(--white); display:flex; align-items:center; justify-content:center; box-shadow:4px 4px 0 var(--black) }
-.canvas-item.selected .canvas-inner{ border-color:var(--red); box-shadow:4px 4px 0 var(--red) }
-.canvas-label{ margin-top:6px; font-size:12px; padding:2px 6px; border:2px solid var(--black); background:var(--white); box-shadow:2px 2px 0 var(--black); text-align:center }
+.canvas-figure{ position:relative; width:120px; height:120px; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+.canvas-figure::after{ content:""; position:absolute; inset:-8px; border:2px solid transparent; border-radius:12px; pointer-events:none; transition:border-color .12s; }
+.canvas-item.selected .canvas-figure::after{ border-color:var(--red); }
 .canvas-item.preview{ cursor:default }
-.canvas-item.preview .canvas-inner{ width:100px; height:90px; box-shadow:2px 2px 0 var(--black) }
-.canvas-item.preview .canvas-label{ display:none }
+.canvas-item.preview .canvas-figure{ width:100px; height:100px; }
+.canvas-item.preview .canvas-figure::after{ display:none; }
 .canvas-img{ max-width:100%; max-height:100%; object-fit:contain; background:transparent }
 .canvas-inner.static{ width:80px; height:80px; border:2px solid var(--black); display:flex; align-items:center; justify-content:center; box-shadow:4px 4px 0 var(--black) }
 .builder-panel{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); padding:12px; margin-bottom:12px }
