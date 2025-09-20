@@ -76,11 +76,16 @@ return <div {...props} style={{ width: props.size || 20, height: props.size || 2
 // ----------------------- Helpers ----------------------------
 const ALL_SEASONS = ['Spring', 'Summer', 'Fall', 'Winter']
 const WORDS = ['stylish', 'chic', 'fashionable', 'YOURSELF']
+const HERO_IMAGES = [
+  'https://pin.it/3Blf4IIwc',
+  'https://pin.it/594gYVUgI',
+  'https://pin.it/7CKNUhA0a'
+]
 
 const CATEGORIES = [
-{ key: 'all', label: 'All' },
-{ key: 'uncategorized', label: 'Uncategorized' },
-{ key: 'hats', label: 'Hats', icon: 'hat' },
+  { key: 'all', label: 'All' },
+  { key: 'uncategorized', label: 'Uncategorized' },
+  { key: 'hats', label: 'Hats', icon: 'hat' },
 { key: 'outerwear', label: 'Outerwear', icon: 'jacket' },
 { key: 'tops', label: 'Tops', icon: 'shirt' },
 { key: 'bottoms', label: 'Bottoms', icon: 'trousers' },
@@ -102,12 +107,17 @@ default: return <SquareStub {...props} />
 }
 }
 function detectSeasons(text) {
-const t = (text || '').toLowerCase(); const out = []
-if (/\bspring\b/.test(t)) out.push('Spring')
-if (/\bsummer\b/.test(t)) out.push('Summer')
-if (/(\bfall\b|\bautumn\b)/.test(t)) out.push('Fall')
-if (/\bwinter\b/.test(t)) out.push('Winter')
-return Array.from(new Set(out))
+  const t = (text || '').toLowerCase(); const out = []
+  if (/\bspring\b/.test(t)) out.push('Spring')
+  if (/\bsummer\b/.test(t)) out.push('Summer')
+  if (/(\bfall\b|\bautumn\b)/.test(t)) out.push('Fall')
+  if (/\bwinter\b/.test(t)) out.push('Winter')
+  return Array.from(new Set(out))
+}
+function clamp(value, min, max) {
+  const num = typeof value === 'number' ? value : parseFloat(value)
+  if (Number.isNaN(num)) return min
+  return Math.min(Math.max(num, min), max)
 }
 // learnable color dictionary — used only to SUGGEST when item has no colors yet
 function getLearnedColors() { try { return JSON.parse(localStorage.getItem('ensemble.colors') || '[]') } catch { return [] } }
@@ -122,52 +132,113 @@ return Array.from(new Set(found))
 }
 
 // ----------------------- Outfit Model -----------------------
-const EMPTY_OUTFIT = { id: 'o1', name: 'Untitled Look', items: { outerwear: null, hat: null, top: null, bottom: null, shoes: null, accessories: [] } }
-
 // ----------------------- App --------------------------------
 export default function App() {
-const [tab, setTab] = useState('dashboard')
-const [items, setItems] = useState([]) // start empty (no demo)
-const [activeCategory, setActiveCategory] = useState('all')
-const [activeSeasonsFilter, setActiveSeasonsFilter] = useState([])
-const [outfit, setOutfit] = useState(EMPTY_OUTFIT)
-const [savedLooks, setSavedLooks] = useState([])
+  const [tab, setTab] = useState('dashboard')
+  const [items, setItems] = useState([]) // start empty (no demo)
+  const [activeCategory, setActiveCategory] = useState('all')
+  const [activeSeasonsFilter, setActiveSeasonsFilter] = useState([])
+  const [canvasItems, setCanvasItems] = useState([])
+  const [selectedCanvasId, setSelectedCanvasId] = useState(null)
+  const [outfitName, setOutfitName] = useState('Untitled Look')
+  const [outfitSeasons, setOutfitSeasons] = useState([])
+  const [savedLooks, setSavedLooks] = useState([])
 
 // learned colors cache (for suggestions)
-const [learned, setLearned] = useState(getLearnedColors())
-useEffect(() => setLearned(getLearnedColors()), [])
+  const [learned, setLearned] = useState(getLearnedColors())
+  useEffect(() => setLearned(getLearnedColors()), [])
 
-// drag data
-const dragDataRef = useRef(null)
-function onDragStart(e, item) {
-if (!item || item.category === 'uncategorized') return // block dragging until categorized
-dragDataRef.current = item
-e.dataTransfer.setData('text/plain', item.id)
-e.dataTransfer.effectAllowed = 'move'
-}
-function onDragOver(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'move' }
-function onDrop(e, zone) {
-e.preventDefault(); const item = dragDataRef.current; if (!item) return
-const map = { outerwear: 'outerwear', hat: 'hats', top: 'tops', bottom: 'bottoms', shoes: 'shoes', accessories: 'accessories' }
-const valid = map[zone] === item.category || (zone === 'accessories' && item.category === 'accessories')
-if (!valid) return bounceInvalid(e.currentTarget)
-setOutfit(prev => {
-const next = structuredClone(prev)
-switch (zone) {
-case 'outerwear': next.items.outerwear = item.id; break
-case 'hat': next.items.hat = item.id; break
-case 'top': next.items.top = item.id; break
-case 'bottom': next.items.bottom = item.id; break
-case 'shoes': next.items.shoes = item.id; break
-case 'accessories': next.items.accessories = [...new Set([item.id, ...next.items.accessories])].slice(0, 3); break
-default: break
-}
-return next
-})
-snapOk(e.currentTarget)
-}
-function bounceInvalid(el) { el.classList.remove('anim-bounce'); void el.offsetWidth; el.classList.add('anim-bounce') }
-function snapOk(el) { el.classList.remove('anim-snap'); void el.offsetWidth; el.classList.add('anim-snap') }
+  useEffect(() => {
+    setCanvasItems(prev => {
+      if (!prev.length) return prev
+      const validIds = new Set(items.map(i => i.id))
+      const filtered = prev.filter(ci => validIds.has(ci.itemId))
+      return filtered.length === prev.length ? prev : filtered
+    })
+  }, [items])
+
+  useEffect(() => {
+    if (selectedCanvasId && !canvasItems.some(ci => ci.canvasId === selectedCanvasId)) {
+      setSelectedCanvasId(null)
+    }
+  }, [canvasItems, selectedCanvasId])
+
+  // drag data
+  const dragDataRef = useRef(null)
+  function onDragStart(e, item) {
+    if (!item || item.category === 'uncategorized') return // block dragging until categorized
+    dragDataRef.current = item
+    if (e.dataTransfer) {
+      e.dataTransfer.setData('text/plain', item.id)
+      e.dataTransfer.effectAllowed = 'move'
+    }
+  }
+  function addItemToCanvas(item, xPercent = 50, yPercent = 50) {
+    if (!item || item.category === 'uncategorized') return
+    const canvasId = `canvas-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+    const clampedX = clamp(xPercent, 5, 95)
+    const clampedY = clamp(yPercent, 5, 95)
+    setCanvasItems(prev => {
+      const maxZ = prev.reduce((acc, curr) => Math.max(acc, curr.z || 0), 0)
+      return [...prev, { canvasId, itemId: item.id, x: clampedX, y: clampedY, scale: 1, z: maxZ + 1 }]
+    })
+    setSelectedCanvasId(canvasId)
+  }
+  function handleCanvasDrop({ xPercent, yPercent, fallbackId }) {
+    const baseItem = dragDataRef.current || items.find(i => i.id === fallbackId)
+    if (!baseItem) return
+    const safeX = Number.isFinite(xPercent) ? xPercent : 50
+    const safeY = Number.isFinite(yPercent) ? yPercent : 50
+    addItemToCanvas(baseItem, safeX, safeY)
+    dragDataRef.current = null
+  }
+  function handleQuickAdd(id) {
+    const item = items.find(i => i.id === id)
+    if (!item) return
+    addItemToCanvas(item, 50, 50)
+  }
+  function moveCanvasItem(id, xPercent, yPercent) {
+    setCanvasItems(prev => prev.map(ci => ci.canvasId === id ? { ...ci, x: clamp(xPercent, 5, 95), y: clamp(yPercent, 5, 95) } : ci))
+  }
+  function updateCanvasItem(id, patch) {
+    setCanvasItems(prev => prev.map(ci => {
+      if (ci.canvasId !== id) return ci
+      const next = { ...ci, ...patch }
+      if (patch.scale != null) next.scale = clamp(patch.scale, 0.4, 2)
+      return next
+    }))
+  }
+  function removeCanvasItem(id) {
+    setCanvasItems(prev => prev.filter(ci => ci.canvasId !== id))
+    setSelectedCanvasId(prev => (prev === id ? null : prev))
+  }
+  function clearCanvas() {
+    setCanvasItems([])
+    setSelectedCanvasId(null)
+  }
+  function reorderCanvasItem(id, direction) {
+    setCanvasItems(prev => {
+      if (prev.length < 2) return prev
+      const sorted = [...prev].sort((a, b) => (a.z || 0) - (b.z || 0))
+      const idx = sorted.findIndex(ci => ci.canvasId === id)
+      if (idx === -1) return prev
+      if (direction === 'up' && idx < sorted.length - 1) {
+        ;[sorted[idx], sorted[idx + 1]] = [sorted[idx + 1], sorted[idx]]
+      } else if (direction === 'down' && idx > 0) {
+        ;[sorted[idx], sorted[idx - 1]] = [sorted[idx - 1], sorted[idx]]
+      } else {
+        return prev
+      }
+      const remapped = sorted.map((ci, order) => ({ ...ci, z: order + 1 }))
+      const map = new Map(remapped.map(ci => [ci.canvasId, ci]))
+      return prev.map(ci => map.get(ci.canvasId) || ci)
+    })
+  }
+  function layerUp(id) { reorderCanvasItem(id, 'up') }
+  function layerDown(id) { reorderCanvasItem(id, 'down') }
+  function toggleOutfitSeason(season) {
+    setOutfitSeasons(prev => prev.includes(season) ? prev.filter(s => s !== season) : [...prev, season])
+  }
 
 // filters
 const visibleItems = useMemo(() => {
@@ -267,12 +338,27 @@ await supabase.from('items').delete().eq('id', id)
 }
 
 // looks
-function saveCurrentOutfit() {
-const hasAny = outfit.items.outerwear || outfit.items.hat || outfit.items.top || outfit.items.bottom || outfit.items.shoes || outfit.items.accessories.length
-if (!hasAny) return
-const id = `o${Date.now()}`
-setSavedLooks(prev => [...prev, { id, name: 'Saved Look', items: structuredClone(outfit.items) }])
-}
+  function saveCurrentOutfit() {
+    if (!canvasItems.length) return
+    const id = `o${Date.now()}`
+    const lookName = outfitName.trim() || 'Untitled Look'
+    const snapshot = canvasItems.map(ci => {
+      const source = items.find(i => i.id === ci.itemId)
+      return {
+        ...ci,
+        snapshot: source ? {
+          name: source.name,
+          imageUrl: source.imageUrl || '',
+          icon: source.icon,
+        } : { name: 'Closet item', imageUrl: '', icon: 'shirt' },
+      }
+    })
+    setSavedLooks(prev => [...prev, { id, name: lookName, seasons: [...outfitSeasons], canvas: snapshot }])
+    setCanvasItems([])
+    setSelectedCanvasId(null)
+    setOutfitName('Untitled Look')
+    setOutfitSeasons([])
+  }
 function deleteLook(id) { setSavedLooks(prev => prev.filter(l => l.id !== id)) }
 
 // word rotation for dashboard
@@ -295,13 +381,14 @@ return (
 </header>
 
 <main style={styles.main}>
-{tab === 'dashboard' && (
-<Dashboard
-items={items}
-heroWord={WORDS[wordIdx]}
-goToCloset={() => setTab('closet')}
-/>
-)}
+        {tab === 'dashboard' && (
+          <Dashboard
+            items={items}
+            savedLooks={savedLooks}
+            heroWord={WORDS[wordIdx]}
+            goToCloset={() => setTab('closet')}
+          />
+        )}
 
 {tab === 'closet' && (
 <Closet
@@ -320,17 +407,28 @@ onDeleteItem={deleteItem}
 />
 )}
 
-{tab === 'builder' && (
-<Builder
-items={items}
-outfit={outfit}
-onDrop={onDrop}
-onDragOver={onDragOver}
-onDragStart={onDragStart}
-onClearZone={(zone) => setOutfit(prev => { const next = structuredClone(prev); if (zone === 'accessories') next.items.accessories = []; else next.items[zone] = null; return next })}
-onSaveOutfit={saveCurrentOutfit}
-/>
-)}
+        {tab === 'builder' && (
+          <Builder
+            items={items}
+            canvasItems={canvasItems}
+            onDragStart={onDragStart}
+            onCanvasDrop={handleCanvasDrop}
+            onQuickAdd={handleQuickAdd}
+            onSelectCanvas={setSelectedCanvasId}
+            selectedCanvasId={selectedCanvasId}
+            onMoveCanvasItem={moveCanvasItem}
+            onUpdateCanvasItem={updateCanvasItem}
+            onRemoveCanvasItem={removeCanvasItem}
+            onLayerUp={layerUp}
+            onLayerDown={layerDown}
+            outfitName={outfitName}
+            onOutfitName={setOutfitName}
+            outfitSeasons={outfitSeasons}
+            onToggleSeason={toggleOutfitSeason}
+            onClearCanvas={clearCanvas}
+            onSaveOutfit={saveCurrentOutfit}
+          />
+        )}
 
 {tab === 'gallery' && (
 <Gallery items={items} savedLooks={savedLooks} onDeleteLook={deleteLook} />
@@ -347,26 +445,23 @@ return (
 )
 }
 
-function Dashboard({ items, heroWord, goToCloset }) {
-const [bgUrl, setBgUrl] = useState(() => { try { return localStorage.getItem('ensemble.heroUrl') || '' } catch { return '' } })
-function setHeroFromPrompt() {
-const u = window.prompt('Paste a direct image URL (.jpg/.png works best):', bgUrl)
-if (u != null) { setBgUrl(u); try { localStorage.setItem('ensemble.heroUrl', u) } catch { } }
-}
-const heroStyle = bgUrl ? { backgroundImage: `url(${bgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}
-const recent = (items || []).slice(0, 6)
-return (
-<section className="section">
-<div className={`hero ${bgUrl ? 'with-bg' : ''}`} style={heroStyle}>
-{bgUrl && <div className="hero-overlay" aria-hidden="true" />}
-<h1 className="hero-title">
+function Dashboard({ items, savedLooks, heroWord, goToCloset }) {
+  const bgUrl = useMemo(() => HERO_IMAGES[Math.floor(Math.random() * HERO_IMAGES.length)], [])
+  const heroStyle = { backgroundImage: `url(${bgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+  const recent = (items || []).slice(0, 6)
+  const newest = items?.[0]
+  const lookCount = savedLooks?.length || 0
+  return (
+    <section className="section">
+      <div className={`hero with-bg`} style={heroStyle}>
+        <div className="hero-overlay" aria-hidden="true" />
+        <h1 className="hero-title">
 <span className="hero-be">BE</span>
 <span className="hero-word"><span key={heroWord} className="swap-word">{heroWord}</span></span>
 </h1>
 <p className="hero-sub">High‑contrast editorial tools for decisive dressing.</p>
 <div className="cta-row">
 <button className="btn" onClick={goToCloset}>Go to Closet</button>
-<button className="btn" onClick={setHeroFromPrompt}>Set hero image</button>
 </div>
 </div>
 
@@ -385,14 +480,14 @@ return (
 ))}
 </div>
 
-<h2 className="section-title"><span className="section-num">02</span> Stats</h2>
-<div className="stats">
-<div className="stat-box"><div className="stat-num">{items?.length || 0}</div><div className="stat-label">Items</div></div>
-<div className="stat-box"><div className="stat-num">{0 + ''}</div><div className="stat-label">Looks</div></div>
-<div className="stat-box"><div className="stat-num">—</div><div className="stat-label">Last Added</div></div>
-</div>
-</section>
-)
+      <h2 className="section-title"><span className="section-num">02</span> Stats</h2>
+      <div className="stats">
+        <div className="stat-box"><div className="stat-num">{items?.length || 0}</div><div className="stat-label">Items</div></div>
+        <div className="stat-box"><div className="stat-num">{lookCount}</div><div className="stat-label">Saved Looks</div></div>
+        <div className="stat-box"><div className="stat-num">{newest?.name || '—'}</div><div className="stat-label">Latest Item</div></div>
+      </div>
+    </section>
+  )
 }
 
 function Closet({ items, activeCategory, onCategory, onSeasonsFilter, activeSeasonsFilter, onDragStart, onUploadClick, fileInputRef, onFileChange, onUpdateItem, onDeleteItem }) {
@@ -423,29 +518,44 @@ return (
 </div>
 </div>
 
-<div className="grid">
-{items.map(i => (
-<div key={i.id} className={`item-card ${i.category==='uncategorized' ? 'hint' : ''}`} draggable={i.category!=='uncategorized'} onDragStart={(e) => onDragStart(e, i)} onClick={() => setEditing(i.id)} title={i.category==='uncategorized' ? 'Set category in editor to enable drag' : 'Drag to Builder board'}>
-<div className="polaroid">
-<div className={`polaroid-frame ${i.imageUrl ? 'no-frame' : ''}`}>
-{i.imageUrl ? (
-<img src={i.imageUrl} alt={i.name} className="no-frame-img" />
-) : (
-iconByKey(i.icon, { size: 40 })
-)}
-</div>
-</div>
-<div className="item-meta">
-<div className="item-title">{i.name}</div>
-<div className="item-sub">{i.category}</div>
-<div className="item-tags">
-{i.colorTags?.map((c, idx) => <span key={idx} className="tag">{c}</span>)}
-{i.seasons?.map((s, idx) => <span key={s+idx} className="tag">{s}</span>)}
-</div>
-</div>
-</div>
-))}
-</div>
+      <div className="closet-grid">
+        {items.map(i => {
+          const seasonsText = i.seasons?.length ? i.seasons.join(' • ') : 'Seasonless staple'
+          return (
+            <div
+              key={i.id}
+              className={`closet-tile ${i.category === 'uncategorized' ? 'hint' : ''}`}
+              draggable={i.category !== 'uncategorized'}
+              onDragStart={e => onDragStart(e, i)}
+              onClick={() => setEditing(i.id)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setEditing(i.id)
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              title={i.category === 'uncategorized' ? 'Set category in editor to enable drag' : 'Drag to Builder board'}
+              aria-label={`${i.name || 'Closet item'}${i.seasons?.length ? `, seasons ${i.seasons.join(', ')}` : ''}`}
+            >
+              <div className="closet-thumb">
+                {i.imageUrl ? (
+                  <img src={i.imageUrl} alt={i.name || 'Closet item'} className="closet-img" />
+                ) : (
+                  <div className="closet-icon" aria-hidden="true">{iconByKey(i.icon, { size: 48 })}</div>
+                )}
+                <div className="closet-overlay">
+                  <div className="closet-label">
+                    <div className="closet-name">{i.name || 'Untitled Piece'}</div>
+                    <div className="closet-season">{seasonsText}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
 
 {selected && (
 <ItemEditor
@@ -561,126 +671,328 @@ return (
 )
 }
 
-function Builder({ items, outfit, onDrop, onDragOver, onClearZone, onDragStart, onSaveOutfit }) {
-const getItem = id => items.find(i => i.id === id)
-return (
-<section className="section builder">
-<div className="builder-left">
-<h2 className="section-title"><span className="section-num">03</span> Categories</h2>
-<p className="muted">Drag items into the board boxes.</p>
-<div className="filmstrip">
-{items.map(i => (
-<div key={i.id} className={`film-cell ${i.category==='uncategorized'?'dim':''}`} draggable={i.category!=='uncategorized'} onDragStart={e => onDragStart?.(e, i)}>
-<div className="film-frame">
-{i.imageUrl ? <img src={i.imageUrl} alt="img" className="no-frame-img small" /> : iconByKey(i.icon, { size: 28 })}
-</div>
-<div className="film-caption">{i.name}</div>
-</div>
-))}
-</div>
-</div>
+function Builder({
+  items,
+  canvasItems,
+  onDragStart,
+  onCanvasDrop,
+  onQuickAdd,
+  onSelectCanvas,
+  selectedCanvasId,
+  onMoveCanvasItem,
+  onUpdateCanvasItem,
+  onRemoveCanvasItem,
+  onLayerUp,
+  onLayerDown,
+  outfitName,
+  onOutfitName,
+  outfitSeasons,
+  onToggleSeason,
+  onClearCanvas,
+  onSaveOutfit,
+}) {
+  const boardRef = useRef(null)
+  const closetMap = useMemo(() => {
+    const map = new Map()
+    items.forEach(item => map.set(item.id, item))
+    return map
+  }, [items])
+  const selected = selectedCanvasId ? canvasItems.find(ci => ci.canvasId === selectedCanvasId) : null
+  const selectedItem = selected ? closetMap.get(selected.itemId) : null
 
-{/* Board center — fixed layout like your reference */}
-<div className="builder-center">
-<div className="board">
-<div className="board-area outerwear">
-<DropZone label="Outerwear" zone="outerwear" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.outerwear} onClear={() => onClearZone('outerwear')}>
-{outfit.items.outerwear && <ZoneItem item={getItem(outfit.items.outerwear)} />}
-</DropZone>
-</div>
-<div className="board-area top">
-<DropZone label="Top" zone="top" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.top} onClear={() => onClearZone('top')}>
-{outfit.items.top && <ZoneItem item={getItem(outfit.items.top)} />}
-</DropZone>
-</div>
-<div className="board-area bottom">
-<DropZone label="Bottom" zone="bottom" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.bottom} onClear={() => onClearZone('bottom')}>
-{outfit.items.bottom && <ZoneItem item={getItem(outfit.items.bottom)} />}
-</DropZone>
-</div>
-<div className="board-area shoes">
-<DropZone label="Shoes" zone="shoes" onDrop={onDrop} onDragOver={onDragOver} filled={!!outfit.items.shoes} onClear={() => onClearZone('shoes')}>
-{outfit.items.shoes && <ZoneItem item={getItem(outfit.items.shoes)} />}
-</DropZone>
-</div>
-<div className="board-area accessories">
-<DropZone label="Accessories" zone="accessories" onDrop={onDrop} onDragOver={onDragOver} filled={outfit.items.accessories.length>0} onClear={() => onClearZone('accessories')}>
-{outfit.items.accessories.map(id => { const it = getItem(id); return <ZoneItem key={id} item={it} small /> })}
-</DropZone>
-</div>
-</div>
-</div>
+  function handleDrop(e) {
+    e.preventDefault()
+    const board = boardRef.current
+    if (!board) return
+    const rect = board.getBoundingClientRect()
+    const xPercent = ((e.clientX - rect.left) / rect.width) * 100
+    const yPercent = ((e.clientY - rect.top) / rect.height) * 100
+    const fallbackId = e.dataTransfer?.getData('text/plain') || undefined
+    onCanvasDrop({ xPercent, yPercent, fallbackId })
+  }
 
-<div className="builder-right">
-<div className="preview">
-<div className="preview-header"><div className="preview-title">Current Look</div></div>
-<div className="preview-actions"><button className="btn" onClick={onSaveOutfit}>Save Look</button></div>
-</div>
-</div>
-</section>
-)
+  function handleDragOver(e) {
+    e.preventDefault()
+  }
+
+  function handleBoardClick() {
+    onSelectCanvas(null)
+  }
+
+  return (
+    <section className="section builder free-builder">
+      <div className="builder-left">
+        <h2 className="section-title"><span className="section-num">03</span> Outfit Builder</h2>
+        <p className="muted">Drag or double-click wardrobe items to place them anywhere.</p>
+        <div className="filmstrip">
+          {items.map(i => (
+            <div
+              key={i.id}
+              className={`film-cell ${i.category === 'uncategorized' ? 'dim' : ''}`}
+              draggable={i.category !== 'uncategorized'}
+              onDragStart={e => onDragStart?.(e, i)}
+              onDoubleClick={() => {
+                if (i.category !== 'uncategorized') onQuickAdd?.(i.id)
+              }}
+              title={i.category === 'uncategorized' ? 'Edit item to set category before using in builder' : 'Drag or double-click to add'}
+            >
+              <div className="film-frame">
+                {i.imageUrl ? <img src={i.imageUrl} alt={i.name} className="no-frame-img small" /> : iconByKey(i.icon, { size: 28 })}
+              </div>
+              <div className="film-caption">{i.name}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="builder-center">
+        <div
+          ref={boardRef}
+          className="free-board"
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onClick={handleBoardClick}
+        >
+          {canvasItems.length === 0 && (
+            <div className="board-hint">Drop pieces here and arrange freely.</div>
+          )}
+          {canvasItems
+            .slice()
+            .sort((a, b) => (a.z || 0) - (b.z || 0))
+            .map(ci => {
+              const src = closetMap.get(ci.itemId)
+              return (
+                <CanvasItem
+                  key={ci.canvasId}
+                  data={ci}
+                  item={src}
+                  boardRef={boardRef}
+                  selected={ci.canvasId === selectedCanvasId}
+                  onSelect={onSelectCanvas}
+                  onMove={onMoveCanvasItem}
+                />
+              )
+            })}
+        </div>
+      </div>
+
+      <div className="builder-right">
+        <div className="builder-panel">
+          <div className="panel-title">Look Details</div>
+          <div className="form-row">
+            <div className="form-label">Look Name</div>
+            <input
+              className="input"
+              value={outfitName}
+              onChange={e => onOutfitName(e.target.value)}
+              placeholder="e.g., Gallery Opening"
+            />
+          </div>
+          <div className="form-row">
+            <div className="form-label">Season</div>
+            <div className="checks">
+              {ALL_SEASONS.map(s => (
+                <label key={s} className="check">
+                  <input type="checkbox" checked={outfitSeasons.includes(s)} onChange={() => onToggleSeason(s)} />
+                  <span>{s}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="panel-actions">
+            <button className="btn" onClick={onSaveOutfit} disabled={!canvasItems.length}>Save Look</button>
+            <button className="btn" onClick={onClearCanvas} disabled={!canvasItems.length}>Clear Board</button>
+          </div>
+        </div>
+
+        <div className="builder-panel">
+          <div className="panel-title">Item Controls</div>
+          {selected ? (
+            <div className="panel-body">
+              <div className="selected-preview">
+                <div className="canvas-inner static">
+                  {selectedItem?.imageUrl ? (
+                    <img src={selectedItem.imageUrl} alt={selectedItem.name} className="canvas-img" />
+                  ) : (
+                    iconByKey(selectedItem?.icon || 'shirt', { size: 32 })
+                  )}
+                </div>
+                <div>
+                  <div className="item-title">{selectedItem?.name || 'Closet item'}</div>
+                  <div className="muted">{selectedItem?.category || 'Uncategorized'}</div>
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="form-label">Size</div>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="1.8"
+                  step="0.05"
+                  value={selected.scale || 1}
+                  onChange={e => onUpdateCanvasItem(selected.canvasId, { scale: parseFloat(e.target.value) })}
+                />
+                <div className="muted small">Scale: {selected.scale?.toFixed(2) || '1.00'}</div>
+              </div>
+              <div className="layer-controls">
+                <button className="btn" onClick={() => onLayerUp(selected.canvasId)}>Layer Up</button>
+                <button className="btn" onClick={() => onLayerDown(selected.canvasId)}>Layer Down</button>
+              </div>
+              <div className="panel-actions">
+                <button className="btn danger" onClick={() => onRemoveCanvasItem(selected.canvasId)}>Remove Item</button>
+              </div>
+            </div>
+          ) : (
+            <p className="muted">Select a canvas item to adjust size, layers, or remove it.</p>
+          )}
+        </div>
+      </div>
+    </section>
+  )
 }
 
-function DropZone({ label, zone, children, onDrop, onDragOver, filled, onClear }) {
-return (
-<div className={`dropzone ${filled ? 'filled' : ''}`} onDragOver={onDragOver} onDrop={(e) => onDrop(e, zone)} tabIndex={0} aria-label={`${label} drop zone`}>
-<div className="dz-label">{label}</div>
-<button className="dz-clear" onClick={onClear} title="Clear"><X size={12} /></button>
-<div className="dz-content">{children}</div>
-</div>
-)
-}
+function CanvasItem({ data, item, boardRef, selected, onSelect, onMove }) {
+  const [dragging, setDragging] = useState(false)
 
-function ZoneItem({ item, small }) {
-if (!item) return null
-return (
-<div className={`zone-item ${small ? 'small' : ''}`} title={item.name}>
-{item.imageUrl ? <img src={item.imageUrl} alt={item.name} className={`no-frame-img ${small ? 'small' : ''}`} /> : iconByKey(item.icon, { size: small ? 18 : 28 })}
-<span className="zone-name">{item.name}</span>
-</div>
-)
+  function handlePointerDown(e) {
+    if (e.button !== 0 && e.pointerType === 'mouse') return
+    e.stopPropagation()
+    onSelect?.(data.canvasId)
+    const board = boardRef.current
+    if (!board) return
+    const rect = board.getBoundingClientRect()
+    const startX = e.clientX
+    const startY = e.clientY
+    const initialX = data.x
+    const initialY = data.y
+    const target = e.currentTarget
+    setDragging(true)
+    target.setPointerCapture(e.pointerId)
+
+    const handleMove = ev => {
+      const dx = ((ev.clientX - startX) / rect.width) * 100
+      const dy = ((ev.clientY - startY) / rect.height) * 100
+      onMove?.(data.canvasId, initialX + dx, initialY + dy)
+    }
+
+    const handleUp = ev => {
+      setDragging(false)
+      target.releasePointerCapture(ev.pointerId)
+      target.removeEventListener('pointermove', handleMove)
+      target.removeEventListener('pointerup', handleUp)
+      target.removeEventListener('pointercancel', handleUp)
+    }
+
+    target.addEventListener('pointermove', handleMove)
+    target.addEventListener('pointerup', handleUp)
+    target.addEventListener('pointercancel', handleUp)
+  }
+
+  return (
+    <div
+      className={`canvas-item ${selected ? 'selected' : ''} ${dragging ? 'dragging' : ''}`}
+      style={{
+        left: `${data.x}%`,
+        top: `${data.y}%`,
+        zIndex: data.z || 1,
+        transform: `translate(-50%, -50%) scale(${data.scale || 1})`,
+      }}
+      onPointerDown={handlePointerDown}
+      onClick={e => { e.stopPropagation(); onSelect?.(data.canvasId) }}
+      tabIndex={0}
+      aria-label={item?.name || 'Closet item'}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onSelect?.(data.canvasId)
+        }
+      }}
+    >
+      <div className="canvas-figure">
+        {item?.imageUrl ? (
+          <img src={item.imageUrl} alt={item.name} className="canvas-img" />
+        ) : (
+          iconByKey(item?.icon || 'shirt', { size: 60 })
+        )}
+      </div>
+    </div>
+  )
 }
 
 function Gallery({ items, savedLooks, onDeleteLook }) {
-const list = savedLooks || []
-return (
-<section className="section">
-<h2 className="section-title"><span className="section-num">04</span> Saved Looks</h2>
-<div className="masonry">
-{list.map(look => (
-<div key={look.id} className="masonry-card">
-<div className="polaroid">
-<div className="polaroid-frame no-frame">
-<div className="board board-static">
-{['outerwear','top','bottom','shoes','accessories'].map(zone => {
-if (zone === 'accessories') return (
-<div key={zone} className={`board-area ${zone}`}>
-<div className="acc-stack">
-{(look.items.accessories || []).map(aid => { const acc = items.find(i => i.id === aid); return <span key={aid} className="tag">{acc?.name || 'Accessory'}</span> })}
-</div>
-</div>
-)
-const id = look.items[zone]
-const it = id && items.find(i => i.id === id)
-return (
-<div key={zone} className={`board-area ${zone}`}>
-{it ? (it.imageUrl ? <img src={it.imageUrl} alt={it.name} className="no-frame-img" /> : iconByKey(it.icon, { size: 36 })) : <div className="look-empty" />}
-</div>
-)
-})}
-</div>
-</div>
-</div>
-<div className="card-body">
-<div className="card-title">{look.name}</div>
-<div className="card-sub italic">Saved outfit</div>
-<button className="btn danger" onClick={() => onDeleteLook(look.id)}><Trash2 size={16}/> Delete Look</button>
-</div>
-</div>
-))}
-</div>
-</section>
-)
+  const list = savedLooks || []
+  const closetMap = useMemo(() => {
+    const map = new Map()
+    items.forEach(item => map.set(item.id, item))
+    return map
+  }, [items])
+
+  if (!list.length) {
+    return (
+      <section className="section">
+        <h2 className="section-title"><span className="section-num">04</span> Saved Looks</h2>
+        <p className="muted">Save outfits from the builder to revisit them here.</p>
+      </section>
+    )
+  }
+
+  return (
+    <section className="section">
+      <h2 className="section-title"><span className="section-num">04</span> Saved Looks</h2>
+      <div className="masonry">
+        {list.map(look => {
+          const canvas = (look.canvas || []).slice().sort((a, b) => (a.z || 0) - (b.z || 0))
+          return (
+            <div key={look.id} className="masonry-card">
+              <div className="polaroid">
+                <div className="polaroid-frame no-frame">
+                  <div className="free-board static">
+                    {canvas.map(ci => {
+                      const current = closetMap.get(ci.itemId)
+                      const display = current || ci.snapshot || {}
+                      return (
+                        <div
+                          key={ci.canvasId}
+                          className="canvas-item preview"
+                          style={{
+                            left: `${ci.x}%`,
+                            top: `${ci.y}%`,
+                            transform: `translate(-50%, -50%) scale(${ci.scale || 1})`,
+                            zIndex: ci.z || 1,
+                          }}
+                          aria-label={display.name || 'Item'}
+                        >
+                          <div className="canvas-figure">
+                            {display.imageUrl ? (
+                              <img src={display.imageUrl} alt={display.name || 'Item'} className="canvas-img" />
+                            ) : (
+                              iconByKey(display.icon || 'shirt', { size: 64 })
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {!canvas.length && <div className="board-hint small">No items saved</div>}
+                  </div>
+                </div>
+              </div>
+              <div className="card-body">
+                <div className="card-title">{look.name}</div>
+                <div className="season-tag-row">
+                  {look.seasons?.length ? (
+                    look.seasons.map(s => <span key={s} className="tag small">{s}</span>)
+                  ) : (
+                    <span className="muted italic">Any season</span>
+                  )}
+                </div>
+                <button className="btn danger" onClick={() => onDeleteLook(look.id)}><Trash2 size={16} /> Delete Look</button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
 }
 
 // ----------------------- Styles ------------------------------
@@ -716,6 +1028,10 @@ const CSS = `
 .cta-row{ display:flex; gap:8px; margin-top:12px; z-index:1 }
 
 .grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:16px }
+.closet-grid{ display:grid; gap:18px; grid-template-columns:repeat(1, minmax(0, 1fr)) }
+@media (min-width:640px){ .closet-grid{ grid-template-columns:repeat(2, minmax(0, 1fr)) } }
+@media (min-width:900px){ .closet-grid{ grid-template-columns:repeat(3, minmax(0, 1fr)) } }
+@media (min-width:1200px){ .closet-grid{ grid-template-columns:repeat(4, minmax(0, 1fr)) } }
 .card{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); display:flex; gap:10px; padding:12px; transition:transform .1s }
 .card:hover{ transform:translate(-2px,-2px) }
 .card-frame{ width:60px; height:60px; display:grid; place-items:center; border:2px solid var(--black) }
@@ -743,16 +1059,22 @@ const CSS = `
 .btn.danger{ border-color:var(--red); color:var(--red) }
 .icon-btn{ border:2px solid var(--black); background:var(--white); padding:4px; cursor:pointer }
 
-.item-card{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); cursor:grab }
-.item-card:active{ cursor:grabbing }
-.item-card.hint{ opacity:.85; outline:2px dashed var(--red) }
-.polaroid{ background:var(--white); border-bottom:2px solid var(--black); padding:8px }
-.polaroid-frame{ border:2px solid var(--black); height:120px; display:grid; place-items:center }
-.polaroid-frame.no-frame{ border:none; box-shadow:none }
-.item-meta{ padding:10px }
-.item-title{ font-weight:700 }
-.item-sub{ color:var(--gray); font-size:12px }
-.item-tags .tag{ display:inline-block; border:2px solid var(--black); padding:2px 6px; margin:4px 4px 0 0; font-size:12px; font-weight:700; background:var(--white) }
+.closet-tile{ position:relative; display:flex; align-items:center; justify-content:center; border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); cursor:grab; overflow:hidden; aspect-ratio:3/4; transition:transform .12s, box-shadow .12s }
+.closet-tile:active{ cursor:grabbing }
+.closet-tile:hover{ transform:translate(-2px,-2px); box-shadow:6px 6px 0 var(--black) }
+.closet-tile.hint{ cursor:pointer; border-style:dashed; border-color:var(--red); box-shadow:4px 4px 0 rgba(139,0,0,.35) }
+.closet-tile:focus-visible{ outline:3px solid var(--red); outline-offset:4px }
+.closet-thumb{ position:relative; flex:1; display:flex; align-items:center; justify-content:center; padding:18px; background:var(--white) }
+.closet-img{ width:100%; height:100%; object-fit:contain }
+.closet-icon{ display:grid; place-items:center; width:80px; height:80px; border:2px solid var(--black); box-shadow:4px 4px 0 var(--black); background:var(--white) }
+.closet-overlay{ position:absolute; inset:0; background:rgba(0,0,0,.68); color:var(--white); display:flex; align-items:center; justify-content:center; text-align:center; padding:20px; opacity:0; transition:opacity .15s ease; pointer-events:none }
+.closet-tile:hover .closet-overlay, .closet-tile:focus-visible .closet-overlay{ opacity:1 }
+.closet-label{ display:flex; flex-direction:column; gap:6px }
+.closet-name{ font-weight:700; font-size:16px; text-transform:uppercase; letter-spacing:1px }
+.closet-season{ font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--off) }
+.polaroid{ background:var(--white); border-bottom:2px solid var(--black); padding:16px }
+.polaroid-frame{ border:2px solid var(--black); height:320px; display:grid; place-items:center }
+.polaroid-frame.no-frame{ border:none; box-shadow:none; height:320px }
 
 /* Drawer */
 .drawer{ position:fixed; right:16px; bottom:16px; width:360px; max-width:calc(100vw - 32px); background:var(--white); border:2px solid var(--black); box-shadow:6px 6px 0 var(--black); padding:12px; z-index:20 }
@@ -774,47 +1096,46 @@ const CSS = `
 .chip-input{ border:none; outline:none; font-family:${FONT_STACK} }
 
 /* Builder */
-.builder{ display:grid; grid-template-columns: 240px 1fr 320px; gap:16px }
+.builder{ display:grid; grid-template-columns:240px 1fr 320px; gap:16px }
+.free-builder .builder-left{ align-self:flex-start }
 .filmstrip{ display:grid; grid-template-columns:repeat(2,1fr); gap:8px }
-.film-cell{ background:var(--white); border:2px solid var(--black); padding:8px }
-.film-cell.dim{ opacity:.5 }
-.film-frame{ border:2px solid var(--black); height:60px; display:grid; place-items:center; box-shadow:4px 4px 0 var(--black) }
+.film-cell{ background:var(--white); border:2px solid var(--black); padding:8px; cursor:grab; transition:transform .12s, box-shadow .12s }
+.film-cell:hover{ transform:translate(-2px,-2px); box-shadow:4px 4px 0 var(--black) }
+.film-cell.dim{ opacity:.35; cursor:not-allowed; pointer-events:none }
+.film-frame{ border:2px solid var(--black); height:60px; display:grid; place-items:center; box-shadow:4px 4px 0 var(--black); background:var(--white) }
 .film-caption{ font-size:12px; text-align:center; margin-top:6px }
+.builder-center{ display:flex; justify-content:center; align-items:stretch }
+.free-board{ position:relative; border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); min-height:520px; width:100%; overflow:hidden }
+.free-board::before{ content:""; position:absolute; inset:0; background-image:linear-gradient(90deg, rgba(0,0,0,.06) 1px, transparent 1px), linear-gradient(180deg, rgba(0,0,0,.06) 1px, transparent 1px); background-size:80px 80px; opacity:.6; pointer-events:none }
+.free-board.static{ min-height:320px; pointer-events:none }
+.board-hint{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--gray); font-style:italic; padding:16px; pointer-events:none }
+.board-hint.small{ font-size:12px }
+.canvas-item{ position:absolute; width:150px; height:150px; display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:grab; }
+.canvas-item.dragging{ cursor:grabbing }
+.canvas-figure{ position:relative; width:120px; height:120px; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+.canvas-figure::after{ content:""; position:absolute; inset:-8px; border:2px solid transparent; border-radius:12px; pointer-events:none; transition:border-color .12s; }
+.canvas-item.selected .canvas-figure::after{ border-color:var(--red); }
+.canvas-item.preview{ cursor:default }
+.canvas-item.preview .canvas-figure{ width:100px; height:100px; }
+.canvas-item.preview .canvas-figure::after{ display:none; }
+.canvas-img{ max-width:100%; max-height:100%; object-fit:contain; background:transparent }
+.canvas-inner.static{ width:80px; height:80px; border:2px solid var(--black); display:flex; align-items:center; justify-content:center; box-shadow:4px 4px 0 var(--black) }
+.builder-panel{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); padding:12px; margin-bottom:12px }
+.panel-title{ font-weight:700; font-size:14px; letter-spacing:1px; text-transform:uppercase; margin-bottom:8px }
+.panel-body{ display:flex; flex-direction:column; gap:12px }
+.selected-preview{ display:flex; gap:12px; align-items:center }
+.layer-controls{ display:flex; gap:8px; flex-wrap:wrap }
+.panel-actions{ display:flex; gap:8px; flex-wrap:wrap; margin-top:8px }
+.season-tag-row{ display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 }
+.tag.small{ font-size:12px; padding:2px 6px }
+.muted.small{ font-size:12px; color:var(--gray) }
 
-/* Board layout */
-.board{ position:relative; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:160px 160px 140px; gap:10px }
-.board-static .dropzone{ pointer-events:none }
-.board-area.outerwear{ grid-column:1/2; grid-row:1/2 }
-.board-area.top{ grid-column:2/3; grid-row:1/2 }
-.board-area.bottom{ grid-column:2/3; grid-row:2/3 }
-.board-area.shoes{ grid-column:1/2; grid-row:3/4 }
-.board-area.accessories{ grid-column:2/3; grid-row:3/4 }
-
-.dropzone{ position:relative; border:2px dashed var(--black); padding:6px; display:grid; place-items:center; transition:transform .08s, border-color .12s; background:var(--white) }
-.dropzone.filled{ border-style:solid }
-.dz-label{ position:absolute; top:-10px; left:8px; background:var(--white); padding:0 6px; font-size:12px; letter-spacing:1px }
-.dz-clear{ position:absolute; top:4px; right:4px; border:2px solid var(--black); background:var(--white); cursor:pointer; padding:2px }
-.dz-content{ display:inline-flex; gap:8px; align-items:center }
-
-.zone-item{ display:inline-flex; align-items:center; gap:8px; padding:4px 8px; border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black) }
-.zone-item.small{ transform:scale(.9) }
-.zone-name{ font-size:14px }
-
-@keyframes snap{ 0%{transform:scale(.98)} 100%{transform:scale(1)} }
-@keyframes bounce{ 0%{transform:translateY(0)} 30%{transform:translateY(-6px)} 60%{transform:translateY(0)} 100%{transform:translateY(0)} }
-.anim-snap{ animation:snap .15s ease-out }
-.anim-bounce{ animation:bounce .25s cubic-bezier(.2,.6,.3,1.2); border-color:var(--red)!important }
-
-/* Preview / Gallery */
-.preview{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black) }
-.preview-header{ display:flex; justify-content:space-between; align-items:center; padding:8px; border-bottom:2px solid var(--black) }
-.preview-title{ font-weight:700 }
-.preview-actions{ padding:8px }
-
-.masonry{ column-count:3; column-gap:12px }
-.masonry-card{ break-inside:avoid; border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); margin-bottom:12px }
-.look-empty{ width:36px; height:36px; border:1px dashed var(--black) }
-.acc-stack{ display:flex; gap:6px; flex-wrap:wrap }
+/* Gallery */
+.masonry{ display:grid; grid-template-columns:1fr; gap:24px }
+.masonry-card{ border:2px solid var(--black); background:var(--white); box-shadow:4px 4px 0 var(--black); display:flex; flex-direction:column }
+.masonry-card .polaroid{ flex:1 }
+.masonry-card .card-body{ padding:16px }
+@media (min-width:900px){ .masonry{ grid-template-columns:repeat(2, minmax(0, 1fr)) } }
 
 .no-frame-img{ max-width:100%; max-height:100%; object-fit:contain; display:block; background:transparent }
 .no-frame-img.small{ max-height:40px }
