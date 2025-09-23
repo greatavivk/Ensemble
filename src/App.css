@@ -1,0 +1,532 @@
+:root {
+  font-family: 'Manrope', 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  color: #140d1a;
+  line-height: 1.5;
+  background-color: #06081a;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 20% 15%, rgba(245, 71, 125, 0.4), transparent 45%),
+    radial-gradient(circle at 80% 0%, rgba(92, 120, 255, 0.35), transparent 55%),
+    linear-gradient(160deg, #0b1127 0%, #1a0a22 55%, #2b0c29 100%);
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  padding: clamp(1rem, 3vw, 2.5rem);
+}
+
+#root {
+  flex: 1;
+  min-height: 100%;
+}
+
+a {
+  color: #c21c4a;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+a:hover,
+a:focus-visible {
+  text-decoration: underline;
+}
+
+.app {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+}
+
+.main-card {
+  width: min(1080px, 100%);
+  margin: auto;
+  background: rgba(255, 255, 255, 0.94);
+  border-radius: 32px;
+  box-shadow: 0 30px 80px rgba(7, 9, 32, 0.38);
+  padding: clamp(2rem, 4vw, 3.5rem);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(2rem, 4vw, 3rem);
+  backdrop-filter: blur(18px);
+}
+
+.header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.header .eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.32em;
+  font-size: 0.75rem;
+  color: rgba(20, 13, 26, 0.55);
+}
+
+.header h1 {
+  margin: 0;
+  font-size: clamp(2.75rem, 6vw, 4.75rem);
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.header p {
+  margin: 0 auto;
+  max-width: 52ch;
+  color: rgba(20, 13, 26, 0.72);
+  font-size: 1.05rem;
+}
+
+.countdown {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92) 0%, rgba(250, 244, 255, 0.88) 100%);
+  border-radius: 28px;
+  padding: clamp(1.75rem, 3vw, 2.75rem);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.75rem;
+  position: relative;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6), 0 20px 35px rgba(31, 18, 61, 0.18);
+}
+
+.countdown--today {
+  background: linear-gradient(135deg, rgba(227, 255, 240, 0.95) 0%, rgba(207, 244, 225, 0.88) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 25px 45px rgba(19, 100, 75, 0.25);
+}
+
+.countdown-days {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.countdown-number {
+  font-size: clamp(5rem, 14vw, 11rem);
+  font-weight: 700;
+  color: #d32157;
+  letter-spacing: -0.04em;
+  line-height: 0.9;
+  text-shadow: 0 15px 35px rgba(211, 33, 87, 0.35);
+}
+
+.countdown--today .countdown-number {
+  color: #138a5c;
+  text-shadow: 0 18px 40px rgba(19, 138, 92, 0.35);
+}
+
+.countdown-label {
+  font-size: 1rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: rgba(20, 13, 26, 0.58);
+}
+
+.countdown-clock {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.countdown-pill {
+  background: rgba(15, 17, 40, 0.92);
+  color: #f5f6ff;
+  border-radius: 16px;
+  padding: 0.85rem 1.2rem;
+  min-width: 92px;
+  text-align: center;
+  box-shadow: 0 12px 24px rgba(15, 17, 40, 0.3);
+}
+
+.countdown-pill__number {
+  display: block;
+  font-size: clamp(1.9rem, 4.5vw, 2.6rem);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.countdown-pill__label {
+  display: block;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.3em;
+  color: rgba(244, 245, 255, 0.7);
+}
+
+.countdown-note {
+  margin: 0;
+  font-size: 0.95rem;
+  text-align: center;
+  color: rgba(20, 13, 26, 0.6);
+}
+
+.api-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: clamp(1.5rem, 3vw, 2.5rem);
+}
+
+.api-card {
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  position: relative;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow: 0 20px 40px rgba(11, 14, 40, 0.16);
+}
+
+.api-card--spotify {
+  background: linear-gradient(145deg, rgba(40, 219, 107, 0.2) 0%, rgba(255, 255, 255, 0.92) 100%);
+}
+
+.api-card--youtube {
+  background: linear-gradient(145deg, rgba(255, 71, 87, 0.18) 0%, rgba(255, 255, 255, 0.94) 100%);
+}
+
+.api-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.api-card__title {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.api-card__badge {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  background: rgba(15, 17, 40, 0.08);
+  color: rgba(15, 17, 40, 0.75);
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+}
+
+.api-card p {
+  margin: 0;
+  color: rgba(20, 13, 26, 0.7);
+  font-size: 0.98rem;
+  line-height: 1.55;
+}
+
+.api-card label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: rgba(20, 13, 26, 0.8);
+}
+
+.api-card input,
+.api-card textarea {
+  width: 100%;
+  font: inherit;
+  padding: 0.75rem 0.9rem;
+  border-radius: 14px;
+  border: 1px solid rgba(15, 17, 40, 0.12);
+  background: rgba(255, 255, 255, 0.88);
+  color: #140d1a;
+  resize: vertical;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+.api-card textarea {
+  min-height: 110px;
+}
+
+.api-card input:focus-visible,
+.api-card textarea:focus-visible {
+  outline: none;
+  border-color: rgba(211, 33, 87, 0.55);
+  box-shadow: 0 0 0 4px rgba(211, 33, 87, 0.18);
+  background: #fff;
+}
+
+.api-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.api-card button {
+  background: #d32157;
+  border: none;
+  color: #fff;
+  font-weight: 600;
+  font-size: 1rem;
+  padding: 0.75rem 1.5rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.api-card button:hover:not(:disabled),
+.api-card button:focus-visible:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 26px rgba(211, 33, 87, 0.35);
+}
+
+.api-card button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  box-shadow: none;
+}
+
+.api-card__status {
+  font-size: 0.95rem;
+  border-radius: 14px;
+  padding: 0.65rem 0.85rem;
+  background: rgba(15, 17, 40, 0.06);
+  color: rgba(15, 17, 40, 0.72);
+}
+
+.api-card__status--error {
+  background: rgba(255, 56, 89, 0.12);
+  color: #b1223e;
+}
+
+.api-card__status--success {
+  background: rgba(29, 125, 81, 0.14);
+  color: #1d7d51;
+}
+
+.spotify-track {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.spotify-track__artwork {
+  width: 96px;
+  height: 96px;
+  border-radius: 16px;
+  object-fit: cover;
+  box-shadow: 0 12px 22px rgba(10, 12, 32, 0.25);
+}
+
+.spotify-track__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.spotify-track__title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.spotify-track__artists {
+  margin: 0;
+  color: rgba(20, 13, 26, 0.65);
+  font-size: 0.95rem;
+}
+
+.spotify-track__album {
+  margin: 0;
+  color: rgba(20, 13, 26, 0.55);
+  font-size: 0.9rem;
+}
+
+.spotify-track__link {
+  color: #138a5c;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.spotify-progress {
+  width: 100%;
+  background: rgba(15, 17, 40, 0.08);
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.spotify-progress__bar {
+  height: 100%;
+  background: linear-gradient(90deg, #1db954 0%, #1ed760 100%);
+  transition: width 0.3s ease;
+}
+
+.spotify-progress__labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.78rem;
+  margin-top: 0.35rem;
+  color: rgba(20, 13, 26, 0.55);
+}
+
+.youtube-channel {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.youtube-channel__thumb {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  object-fit: cover;
+  box-shadow: 0 12px 22px rgba(12, 14, 42, 0.25);
+}
+
+.youtube-channel__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.youtube-channel__title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.youtube-channel__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  color: rgba(20, 13, 26, 0.6);
+}
+
+.youtube-channel__stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(15, 17, 40, 0.06);
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  font-weight: 600;
+  color: rgba(15, 17, 40, 0.8);
+}
+
+.youtube-channel__link {
+  color: #c21c4a;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.youtube-channel__description {
+  margin: 0;
+  font-size: 0.9rem;
+  color: rgba(20, 13, 26, 0.62);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.youtube-latest {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.youtube-latest__thumb {
+  width: 128px;
+  aspect-ratio: 16 / 9;
+  border-radius: 18px;
+  object-fit: cover;
+  box-shadow: 0 12px 24px rgba(12, 14, 42, 0.2);
+  background: rgba(15, 17, 40, 0.08);
+}
+
+.youtube-latest__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.youtube-latest__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.youtube-latest__date {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(20, 13, 26, 0.55);
+}
+
+.disclaimer {
+  margin: 0;
+  text-align: center;
+  font-size: 0.88rem;
+  color: rgba(20, 13, 26, 0.58);
+  line-height: 1.6;
+}
+
+.disclaimer strong {
+  color: #140d1a;
+}
+
+.api-card__help code {
+  font-family: 'Fira Code', 'SFMono-Regular', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
+  background: rgba(15, 17, 40, 0.08);
+  padding: 0.15rem 0.4rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: rgba(20, 13, 26, 0.75);
+}
+
+@media (max-width: 880px) {
+  body {
+    padding: clamp(0.75rem, 3vw, 1.5rem);
+  }
+
+  .main-card {
+    border-radius: 24px;
+  }
+
+  .spotify-track,
+  .youtube-channel,
+  .youtube-latest {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .spotify-track__artwork {
+    width: 120px;
+    height: 120px;
+  }
+
+  .youtube-latest__thumb {
+    width: 100%;
+    max-width: 360px;
+  }
+}
+
+@media (max-width: 540px) {
+  .countdown-pill {
+    min-width: 80px;
+  }
+
+  .api-card__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .api-card button {
+    width: 100%;
+  }
+}
